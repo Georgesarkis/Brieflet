@@ -8,7 +8,7 @@ results: results           # JSONL rows + reports go here
 repos:
   eshop:
     path: ~/bench/repos/eShop          # a clean clone, checked out at `sha`
-    sha: main                          # pin a commit before a real run
+    sha: 3c6e531a6063676ece317644f72172fb42a935b3   # dotnet/eShop main, 26 Nov 2026
     questions: questions/eshop.yaml
     strip: [CLAUDE.md, AGENTS.md, AI_CONTEXT.md, DECISIONS.md, docs/architecture, docs/decisions]
 

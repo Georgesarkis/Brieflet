@@ -1,6 +1,7 @@
-# Questions for dotnet/eShop. Types: overview | trace | change | detail (see SPEC.md).
-# The first 3 are the 22 Nov 2026 questions, kept so new numbers compare with the old slide.
-# TODO before a real run: 7 more, written BEFORE looking at any arm's answers, plus reference answers for the judge.
+# Questions for dotnet/eShop @ 3c6e531a (pinned 26 Nov 2026). Types: overview | trace | change | detail (SPEC.md).
+# q1-q3 are the 22 Nov 2026 questions, kept so new numbers compare with the old slide.
+# q4-q10 written 26 Nov 2026 from the code, BEFORE any arm was run. Don't edit after the first real run;
+# add new ones as q11+ instead. Reference answers for the judge: TODO (written separately, checked by George).
 repo: eshop
 questions:
   - id: q1
@@ -12,3 +13,24 @@ questions:
   - id: q3
     type: trace
     text: "How do orders move from checkout to paid? Name the services and the events."
+  - id: q4
+    type: overview
+    text: "What are the main services in this system, what does each one own, and how do they talk to each other (HTTP, gRPC, events)?"
+  - id: q5
+    type: overview
+    text: "Which databases, caches and message brokers does the system use, and which service uses which?"
+  - id: q6
+    type: overview
+    text: "How does authentication work across the web app, the mobile BFF and the backend APIs?"
+  - id: q7
+    type: trace
+    text: "How does catalog search by meaning (semantic search) work, from the request to the result? What happens when no AI model is configured?"
+  - id: q8
+    type: change
+    text: "I want to add a discount code at checkout. Which projects and files would I change, and which events or contracts are affected?"
+  - id: q9
+    type: detail
+    text: "How long is the grace period before a submitted order moves on, and where is that value set?"
+  - id: q10
+    type: detail
+    text: "What is the name of the RabbitMQ exchange the event bus publishes to, and where is it defined?"
