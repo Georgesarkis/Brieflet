@@ -1,0 +1,41 @@
+# Free pilot: Claude Code on your own Claude login ($0 extra, uses your plan's limit).
+# Repo = public dotnet/eShop @ ab10e4c, the commit geolinux's engine documented on 22 Nov 2026 (eshop-demo 1c0ace6).
+# Arms use those 22 Nov docs (bench/artifacts/eshop-ab10e4c), so this re-tests the slide with 10 questions + a no-graph arm.
+#   git clone --filter=blob:none https://github.com/dotnet/eShop ~/bench/repos/eShop-ab10e4c
+#   git -C ~/bench/repos/eShop-ab10e4c checkout ab10e4c68fd26369578ebfb3fd1ccf3b867d0444
+repeats: 2
+max_usd: 0                 # nothing paid in this config
+max_usd_per_run: 1.00
+results: results/pilot
+notify_cmd: notify         # geolinux ntfy push when done (skipped if the command doesn't exist)
+
+repos:
+  eshop-ab10e4c:
+    path: ~/bench/repos/eShop-ab10e4c
+    sha: ab10e4c68fd26369578ebfb3fd1ccf3b867d0444
+    questions: questions/eshop.yaml
+    strip: [CLAUDE.md, AGENTS.md, AI_CONTEXT.md, DECISIONS.md, docs/architecture, docs/decisions]
+
+artifacts: artifacts
+arms:
+  none: {}
+  graphify-ast:            # Graphify code graph only (as on the slide's red bar)
+    overlay: ["{artifacts}/{repo}/graphify-ast"]
+    claude_md: "# Code map\n\nA code graph of this repo (Graphify: hubs, communities, key files) is in\n[docs/architecture/GRAPH_REPORT.md](docs/architecture/GRAPH_REPORT.md). Read it first to find where things are.\n"
+  brieflet:                # AI_CONTEXT + diagram + decisions, NO graph
+    overlay: ["{artifacts}/{repo}/brieflet"]
+  brieflet-graph:          # everything the engine wrote (= the slide's blue bar)
+    overlay: ["{artifacts}/{repo}/brieflet-graph"]
+
+models:
+  - name: sonnet-sub
+    runner: claude_code
+    model: sonnet
+    billing: subscription
+
+prior_tokens:
+  none: {input: 53000, output: 2000}
+  graphify-ast: {input: 115000, output: 2000}
+  brieflet: {input: 26000, output: 2000}
+  brieflet-graph: {input: 26000, output: 2000}
+  default: {input: 80000, output: 2000}

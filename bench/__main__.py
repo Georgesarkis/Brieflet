@@ -13,6 +13,7 @@ import datetime as dt
 import json
 import os
 import shutil
+import subprocess
 import statistics as st
 import sys
 import tempfile
@@ -138,6 +139,11 @@ def plan(cfg: dict, only: str | None = None, quiet: bool = False) -> dict:
 def prepare(cfg: dict, repo: str, arm: str, tmp: Path) -> Path:
     rc = cfg["repos"][repo]
     src = expand(cfg, rc["path"])
+    want = str(rc.get("sha") or "")
+    if len(want) == 40:
+        head = subprocess.run(["git", "-C", str(src), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+        if head != want:
+            raise SystemExit(f"{repo}: {src} is at {head[:7] or '?'}, config pins {want[:7]}: git -C {src} checkout {want}")
     dst = tmp / f"{repo}-{arm}"
     if dst.exists():
         return dst
@@ -198,7 +204,10 @@ def run(cfg: dict, yes: bool, only: str | None) -> int:
                             tin = row["input_tokens"] + row["cache_read"] + row["cache_write"]
                             print(f"{repo} {m['name']} {q['id']} #{r} {arm:14} in={tin:>8,} out={row['output_tokens']:>6,} "
                                   f"{row['secs']:>6}s" + (f"  ERROR {row['error']}" if row.get("error") else ""))
-    print(f"\nDone. Paid spend this run ≈ ${spent:.2f}. Rows → {out}")
+    msg = f"Brieflet bench {run_id} done: paid spend ≈ ${spent:.2f}. Rows → {out}"
+    print("\n" + msg)
+    if cfg.get("notify_cmd") and shutil.which(cfg["notify_cmd"]):
+        subprocess.run([cfg["notify_cmd"], msg], check=False, timeout=30)
     return 0
 
 
