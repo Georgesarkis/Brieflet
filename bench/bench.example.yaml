@@ -1,0 +1,47 @@
+# Copy to bench.yaml and edit. `python -m bench plan` shows the matrix + cost estimate and spends nothing.
+
+repeats: 3                 # runs per question × arm × model (Claude's token use varies a lot run to run)
+max_usd: 10                # hard stop for paid runners: `run` refuses if the estimate is above it, and stops mid-run
+max_usd_per_run: 1.00      # one question run is cut off above this
+results: results           # JSONL rows + reports go here
+
+repos:
+  eshop:
+    path: ~/bench/repos/eShop          # a clean clone, checked out at `sha`
+    sha: main                          # pin a commit before a real run
+    questions: questions/eshop.yaml
+    strip: [CLAUDE.md, AGENTS.md, AI_CONTEXT.md, DECISIONS.md, docs/architecture, docs/decisions]
+
+# What each arm puts in the repo copy (after `strip`). {artifacts} = folder with generated docs per repo.
+artifacts: ~/bench/artifacts
+arms:
+  none: {}
+  graphify-ast:
+    overlay: ["{artifacts}/{repo}/graphify-ast"]
+    claude_md: "# Code map\n\nA code graph of this repo (Graphify) is in [docs/architecture/GRAPH_REPORT.md](docs/architecture/GRAPH_REPORT.md). Read it first to find where things are.\n"
+  brieflet:
+    overlay: ["{artifacts}/{repo}/brieflet"]       # AI_CONTEXT.md + CLAUDE.md + diagram + ADRs, no graph
+
+# Which model answers. Compare arms within one model only.
+models:
+  - name: sonnet-sub                   # Claude Code on your Claude login: $0 extra, uses your plan's usage limit
+    runner: claude_code
+    model: sonnet
+    billing: subscription
+  # - name: sonnet-api                 # real money: ANTHROPIC_API_KEY
+  #   runner: anthropic
+  #   model: claude-sonnet-5-5
+  # - name: opus-api
+  #   runner: anthropic
+  #   model: claude-opus-5-5
+  # - name: gpt
+  #   runner: openai                   # OPENAI_API_KEY; fill the model id + price in prices.yaml first
+  #   model: gpt-placeholder
+
+# Token guess per question run, used until real results exist (then `plan` uses measured medians instead).
+# From the 22 Nov 2026 eshop-demo run (Sonnet, Claude Code): none 158k / 3 q, graph 343k / 3 q, docs 78k / 3 q.
+prior_tokens:
+  none: {input: 53000, output: 2000}
+  graphify-ast: {input: 115000, output: 2000}
+  brieflet: {input: 26000, output: 2000}
+  default: {input: 80000, output: 2000}

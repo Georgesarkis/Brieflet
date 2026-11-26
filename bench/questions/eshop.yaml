@@ -1,0 +1,14 @@
+# Questions for dotnet/eShop. Types: overview | trace | change | detail (see SPEC.md).
+# The first 3 are the 22 Nov 2026 questions, kept so new numbers compare with the old slide.
+# TODO before a real run: 7 more, written BEFORE looking at any arm's answers, plus reference answers for the judge.
+repo: eshop
+questions:
+  - id: q1
+    type: trace
+    text: "How does the web app get the user's basket, and which service and storage are involved?"
+  - id: q2
+    type: change
+    text: "If I add a new backend service, which files must I change so the web app can call it?"
+  - id: q3
+    type: trace
+    text: "How do orders move from checkout to paid? Name the services and the events."
