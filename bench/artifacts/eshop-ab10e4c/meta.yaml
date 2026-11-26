@@ -1,0 +1,20 @@
+# Who wrote these docs. Shown on the dashboard.
+repo: dotnet/eShop
+sha: ab10e4c68fd26369578ebfb3fd1ccf3b867d0444
+generated: 2026-11-22
+source: geolinux dev_docs worker (Brieflet's engine before it was split out), bootstrap run on eshop-demo 1c0ace6
+hardware: RTX 2070 8 GB (geolinux home server)
+writers:
+  - role: diagram box labels, decision classification
+    model: qwen3.5:9b
+    runtime: Ollama (local)
+  - role: AI_CONTEXT.md prose, decision records
+    model: Bonsai 27B (hf.co/prism-ml/Bonsai-27B-gguf:Q1_0)
+    runtime: Ollama (local)
+  - role: code graph (graphify-ast arm)
+    model: none (Graphify 0.9.114, AST only, community labels off)
+    runtime: local CLI
+arms:
+  brieflet: AI_CONTEXT.md, CLAUDE.md, components diagram, 10 decision records, DECISIONS.md (no graph)
+  graphify-ast: GRAPH_REPORT.md + graph.html + a 2-line CLAUDE.md pointer
+  brieflet-graph: everything above together (the 22 Nov slide's "local docs" bar)

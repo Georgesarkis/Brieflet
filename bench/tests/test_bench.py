@@ -142,3 +142,24 @@ def test_judge_score_rule():
     assert score(3, {"must": [True, False, False], "wrong_claims": []}) == 1
     assert score(2, {"must": [True, True], "wrong_claims": [{"severity": "major"}]}) == 0
     assert score(2, {"must": [True, True], "wrong_claims": [{"severity": "minor"}]}) == 2
+
+
+def test_stop_on_errors_then_resume(setup, monkeypatch):
+    p, tmp = setup
+    cfg = yaml.safe_load(open(p)); cfg["repeats"] = 3; p.write_text(yaml.safe_dump(cfg))
+    from bench.runners import fake
+    real = fake.run
+    state = {"n": 0}
+    def flaky(*a, **k):
+        state["n"] += 1
+        r = real(*a, **k)
+        if state["n"] > 2:
+            r["error"] = "usage limit"
+        return r
+    monkeypatch.setattr(b.runners, "get", lambda name: flaky)
+    assert b.main(["run", "-c", str(p)]) == 4          # stops after 3 errors in a row
+    assert state["n"] == 5
+    monkeypatch.setattr(b.runners, "get", lambda name: real)
+    assert b.main(["run", "-c", str(p), "--resume"]) == 0
+    ok = [json.loads(l) for l in open(tmp / "res" / "runs.jsonl") if not json.loads(l).get("error")]
+    assert len(ok) == 6 and len({(r["arm"], r["rep"]) for r in ok}) == 6

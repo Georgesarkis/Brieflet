@@ -1,8 +1,9 @@
 """Brieflet benchmark: does a short AI context make a model read fewer tokens and answer faster, without worse answers?
 
   python -m bench plan   [-c bench.yaml]                      matrix + cost estimate. Never spends.
-  python -m bench run    [-c bench.yaml] --yes [--only MODEL]  runs it. Paid runners need --yes AND estimate ≤ max_usd.
+  python -m bench run    [-c bench.yaml] --yes [--only MODEL] [--resume]  runs it. Paid runners need --yes AND estimate ≤ max_usd.
   python -m bench judge  [-c bench.yaml] [--yes]               quality 0-3 per answer (free via Claude Code by default).
+  python -m bench dashboard [-c bench.yaml]                   one HTML page: results, models, generated docs.
   python -m bench report [-c bench.yaml]                      median table per repo × model × arm.
 
 Money rule: nothing that costs money runs without `--yes`, and `run` re-checks the estimate against max_usd first.
@@ -164,7 +165,7 @@ def prepare(cfg: dict, repo: str, arm: str, tmp: Path) -> Path:
     return dst
 
 
-def run(cfg: dict, yes: bool, only: str | None) -> int:
+def run(cfg: dict, yes: bool, only: str | None, resume: bool = False) -> int:
     tot = plan(cfg, only)
     max_usd = float(cfg.get("max_usd", 0))
     if tot["paid_runs"]:
@@ -177,7 +178,10 @@ def run(cfg: dict, yes: bool, only: str | None) -> int:
     reps, per_run_cap = cfg.get("repeats", 3), float(cfg.get("max_usd_per_run", 1.0))
     out = results_file(cfg)
     run_id = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-    spent = 0.0
+    spent, errors_in_a_row = 0.0, 0
+    done = {(r["repo"], r["model"], r["arm"], r["q"], r["rep"]) for r in rows(cfg) if not r.get("error")} if resume else set()
+    if resume:
+        print(f"resume: skipping {len(done)} runs that already worked")
     with tempfile.TemporaryDirectory(prefix="brieflet-bench-") as t:
         tmp = Path(t)
         for repo in cfg["repos"]:
@@ -188,6 +192,8 @@ def run(cfg: dict, yes: bool, only: str | None) -> int:
                 for q in questions(cfg, repo):
                     for r in range(1, reps + 1):
                         for arm in cfg["arms"]:  # arms interleaved: time-of-day / cache effects hit all arms alike
+                            if (repo, m["name"], arm, q["id"], r) in done:
+                                continue
                             if paid(m):
                                 tok, _ = per_run_tokens(cfg, arm, m["name"])
                                 nxt = estimate_run(tok, price)[1]
@@ -203,9 +209,17 @@ def run(cfg: dict, yes: bool, only: str | None) -> int:
                                        question=q["text"])
                             with open(out, "a") as fh:
                                 fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+                            errors_in_a_row = errors_in_a_row + 1 if row.get("error") else 0
                             tin = row["input_tokens"] + row["cache_read"] + row["cache_write"]
                             print(f"{repo} {m['name']} {q['id']} #{r} {arm:14} in={tin:>8,} out={row['output_tokens']:>6,} "
                                   f"{row['secs']:>6}s" + (f"  ERROR {row['error']}" if row.get("error") else ""))
+                            if errors_in_a_row >= 3:
+                                msg = (f"Brieflet bench stopped: 3 errors in a row (usage limit?). Last: {row['error']}. "
+                                       "Run again later with --resume.")
+                                print(msg)
+                                if cfg.get("notify_cmd") and shutil.which(cfg["notify_cmd"]):
+                                    subprocess.run([cfg["notify_cmd"], msg[:300]], check=False, timeout=30)
+                                return 4
     msg = f"Brieflet bench {run_id} done: paid spend ≈ ${spent:.2f}. Rows → {out}"
     print("\n" + msg)
     if cfg.get("notify_cmd") and shutil.which(cfg["notify_cmd"]):
@@ -282,11 +296,15 @@ def report(cfg: dict) -> int:
     for repo in sorted({r["repo"] for r in rs}):
         for model in sorted({r["model"] for r in rs if r["repo"] == repo}):
             base = None
+            have = [{r["q"] for r in rs if r["repo"] == repo and r["model"] == model and r["arm"] == a} for a in cfg["arms"]]
+            common = sorted(set.intersection(*[h for h in have if h])) if any(have) else []
+            print(f"{repo} / {model}: tokens, seconds and USD are summed over the {len(common)} questions every setup answered: "
+                  f"{', '.join(common)}")
             for arm in cfg["arms"]:
                 g = [r for r in rs if r["repo"] == repo and r["model"] == model and r["arm"] == arm]
                 if not g:
                     continue
-                qs = sorted({r["q"] for r in g})
+                qs = common
                 tin = sum(med([r["input_tokens"] + r["cache_read"] + r["cache_write"] for r in g if r["q"] == q]) for q in qs)
                 secs = sum(med([r["secs"] for r in g if r["q"] == q]) for q in qs)
                 usd = sum(med([r.get("cost_usd") or 0 for r in g if r["q"] == q]) for q in qs)
@@ -309,19 +327,26 @@ def report(cfg: dict) -> int:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m bench")
-    ap.add_argument("cmd", choices=["plan", "run", "judge", "report"])
+    ap.add_argument("cmd", choices=["plan", "run", "judge", "report", "dashboard"])
     ap.add_argument("-c", "--config", default="bench.yaml")
     ap.add_argument("--yes", action="store_true", help="allow paid runs (after reading `plan`)")
     ap.add_argument("--only", help="only this model name from the config")
+    ap.add_argument("--resume", action="store_true", help="skip runs that already worked (after a usage limit)")
     a = ap.parse_args(argv)
     sys.stdout.reconfigure(line_buffering=True)  # progress shows up in a nohup log right away
     cfg = load(a.config)
     if a.cmd == "plan":
         plan(cfg, a.only); return 0
     if a.cmd == "run":
-        return run(cfg, a.yes, a.only)
+        return run(cfg, a.yes, a.only, a.resume)
     if a.cmd == "judge":
         return judge(cfg, a.yes)
+    if a.cmd == "dashboard":
+        from .dashboard import build
+        out = results_file(cfg).with_name("dashboard.html")
+        out.write_text(build(cfg, rows(cfg), verdicts(cfg), row_key, expand), encoding="utf-8")
+        print(f"wrote {out}")
+        return 0
     return report(cfg)
 
 
