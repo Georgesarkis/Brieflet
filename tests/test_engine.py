@@ -75,3 +75,20 @@ def test_learned_kept_and_pruned(tmp_path):
     assert any("src/Removed/Old.cs" in n for n in res["notes"])
     claude = (out / "CLAUDE.md").read_text()
     assert "LEARNED.md" in claude and "had to search the code" in claude
+
+
+def test_footer_on_by_default_and_can_be_turned_off(tmp_path, monkeypatch):
+    from brieflet.engine import FOOTER
+    r = repo(tmp_path)
+    out = tmp_path / "on"
+    Init(r, FakeLLM("ollama"), out, log=lambda *a: None).run(Init(r, FakeLLM("ollama"), out).plan())
+    for f in (AI_CONTEXT, COMPONENTS, DECISIONS):
+        assert (out / f).read_text().rstrip().endswith(FOOTER)
+    assert FOOTER not in (out / "CLAUDE.md").read_text() and FOOTER not in (out / "LEARNED.md").read_text()
+    off = tmp_path / "off"
+    Init(r, FakeLLM("ollama"), off, log=lambda *a: None, footer=False).run(Init(r, FakeLLM("ollama"), off).plan())
+    assert FOOTER not in (off / AI_CONTEXT).read_text()
+    monkeypatch.setenv("BRIEFLET_FOOTER", "0")
+    env = tmp_path / "env"
+    Init(r, FakeLLM("ollama"), env, log=lambda *a: None).run(Init(r, FakeLLM("ollama"), env).plan())
+    assert FOOTER not in (env / COMPONENTS).read_text()
