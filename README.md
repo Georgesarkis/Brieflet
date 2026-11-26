@@ -7,6 +7,18 @@ First measurement (22 Nov 2026, eShop, Claude Sonnet, 3 questions × 2 runs): **
 158k with no docs and 343k with a raw Graphify code graph**, 30 s vs 54 s. Small sample: the benchmark in
 [`bench/`](bench/) exists to test this properly, including answer quality.
 
+## Use
+
+```
+pip install requests                                   # + anthropic / openai for cloud models
+python -m brieflet init path/to/repo --plan            # what it will do + cost, calls no model
+python -m brieflet init path/to/repo                   # local Ollama ($0): qwen3.5:9b labels, Bonsai 27B writes
+python -m brieflet init path/to/repo --llm anthropic --yes   # Haiku labels, Sonnet writes (~$0.12 on eShop)
+```
+
+Writes `AI_CONTEXT.md`, `CLAUDE.md` (pointer), `docs/architecture/components.md` and `docs/decisions/` + `DECISIONS.md`.
+`--out DIR` writes somewhere else instead of into the repo. Today it understands **.NET Aspire** repos only.
+
 ## Benchmark
 
 ```

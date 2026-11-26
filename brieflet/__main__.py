@@ -1,0 +1,53 @@
+"""brieflet init <repo> [--llm ollama|anthropic|openai] [--out DIR] [--yes]
+
+Local (Ollama) is free and the default. Cloud backends print an estimate first and only send anything with --yes.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+from .engine import Init
+from .llm import LLM, LLMError
+
+
+def main(argv=None) -> int:
+    ap = argparse.ArgumentParser(prog="brieflet")
+    sub = ap.add_subparsers(dest="cmd", required=True)
+    i = sub.add_parser("init", help="write AI_CONTEXT.md + diagram + decision records for a repo")
+    i.add_argument("repo")
+    i.add_argument("--llm", choices=["ollama", "anthropic", "openai"], default="ollama")
+    i.add_argument("--small-model")
+    i.add_argument("--write-model")
+    i.add_argument("--out", help="write here instead of into the repo (e.g. a benchmark arm folder)")
+    i.add_argument("--rev", default="HEAD")
+    i.add_argument("--plan", action="store_true", help="show what would run + cost, call no model")
+    i.add_argument("--yes", action="store_true", help="allow paid (cloud) model calls")
+    a = ap.parse_args(argv)
+
+    try:
+        llm = LLM(a.llm, a.small_model, a.write_model)
+    except LLMError as e:
+        print(e); return 2
+    job = Init(Path(a.repo), llm, Path(a.out) if a.out else None, a.rev)
+    plan = job.plan()
+    est = llm.estimate_usd(plan["calls"])
+    print(f"{len(plan['comp']['nodes'])} components, {len(plan['adrs'])} decision candidates, {len(plan['calls'])} model calls "
+          f"({llm.backend}: small={llm.small}, write={llm.write}).")
+    if llm.paid:
+        print("Cost estimate (worst case): " + (f"${est:.3f}" if est is not None else "unknown (no price for this model)"))
+    else:
+        print("Cost: $0 (local model).")
+    if a.plan:
+        return 0
+    if llm.paid and not a.yes:
+        print("Refused: cloud models cost money. Re-run with --yes after reading the estimate."); return 2
+    res = job.run(plan)
+    print(json.dumps(res, indent=1))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
