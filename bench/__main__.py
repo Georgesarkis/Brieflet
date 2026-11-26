@@ -325,6 +325,17 @@ def report(cfg: dict) -> int:
     return 0
 
 
+def dashboard(cfg: dict) -> None:
+    """Rebuilt after every run / judge so the page is always current (geolinux serves it on :8097)."""
+    from .dashboard import build
+    out = results_file(cfg).with_name("dashboard.html")
+    try:
+        out.write_text(build(cfg, rows(cfg), verdicts(cfg), row_key, expand), encoding="utf-8")
+        print(f"dashboard: {out}")
+    except Exception as e:  # never let the page break a finished run
+        print(f"dashboard not rebuilt: {e}")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m bench")
     ap.add_argument("cmd", choices=["plan", "run", "judge", "report", "dashboard"])
@@ -338,14 +349,15 @@ def main(argv=None) -> int:
     if a.cmd == "plan":
         plan(cfg, a.only); return 0
     if a.cmd == "run":
-        return run(cfg, a.yes, a.only, a.resume)
+        rc = run(cfg, a.yes, a.only, a.resume)
+        dashboard(cfg)
+        return rc
     if a.cmd == "judge":
-        return judge(cfg, a.yes)
+        rc = judge(cfg, a.yes)
+        dashboard(cfg)
+        return rc
     if a.cmd == "dashboard":
-        from .dashboard import build
-        out = results_file(cfg).with_name("dashboard.html")
-        out.write_text(build(cfg, rows(cfg), verdicts(cfg), row_key, expand), encoding="utf-8")
-        print(f"wrote {out}")
+        dashboard(cfg)
         return 0
     return report(cfg)
 
