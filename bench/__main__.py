@@ -246,9 +246,14 @@ def row_key(r: dict) -> str:
     return f'{r["run"]}|{r["repo"]}|{r["model"]}|{r["arm"]}|{r["q"]}|{r["rep"]}'
 
 
+def notify(cfg: dict, msg: str) -> None:
+    if cfg.get("notify_cmd") and shutil.which(cfg["notify_cmd"]):
+        subprocess.run([cfg["notify_cmd"], msg[:300]], check=False, timeout=30)
+
+
 def judge(cfg: dict, yes: bool) -> int:
     jc = cfg.get("judge") or {"runner": "claude_code", "model": "opus"}
-    done = verdicts(cfg)
+    done = {k for k, v in verdicts(cfg).items() if v.get("score") is not None}  # failed ones are retried
     todo = []
     for r in rows(cfg):
         if r.get("error") or row_key(r) in done:
@@ -271,6 +276,7 @@ def judge(cfg: dict, yes: bool) -> int:
             print("Refused: paid judge needs --yes."); return 2
         if est > float(cfg.get("max_usd", 0)):
             print(f"Refused: estimate > max_usd ${cfg.get('max_usd', 0)}."); return 2
+    fails = 0
     with open(judge_file(cfg), "a") as fh:
         for i, (r, refs) in enumerate(todo, 1):
             raw, use = J.ask(jc, J.prompt(r["question"], refs, r.get("answer") or ""))
@@ -280,6 +286,13 @@ def judge(cfg: dict, yes: bool) -> int:
             fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
             fh.flush()
             print(f"{i}/{len(todo)} {r['q']} {r['arm']:14} score={rec['score']}")
+            fails = fails + 1 if rec["score"] is None else 0
+            if fails >= 3:
+                msg = "Brieflet judge stopped: 3 failures in a row (usage limit?). Run judge again later, it continues."
+                print(msg)
+                notify(cfg, msg)
+                return 4
+    notify(cfg, f"Brieflet judge done: {len(todo)} answers scored. Dashboard updated.")
     return 0
 
 
