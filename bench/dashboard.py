@@ -101,7 +101,7 @@ def md(text: str) -> str:
     return "\n".join(out)
 
 
-def build(cfg: dict, rows: list[dict], verdicts: dict, row_key, expand) -> str:
+def build(cfg: dict, rows: list[dict], verdicts: dict, row_key, expand, status: str = "", learned_dir=None) -> str:
     repo = next(iter(cfg["repos"]))
     rc = cfg["repos"][repo]
     arms = list(cfg["arms"])
@@ -244,6 +244,14 @@ def build(cfg: dict, rows: list[dict], verdicts: dict, row_key, expand) -> str:
         docs.append(f"<p class='muted'>For comparison: Graphify's <code>GRAPH_REPORT.md</code> is {n:,} chars ≈ {n // 4:,} tokens "
                     f"({n / max(1, len((art / 'brieflet' / 'AI_CONTEXT.md').read_text()) if (art / 'brieflet' / 'AI_CONTEXT.md').exists() else 1):.0f}× AI_CONTEXT.md).</p>")
 
+    # ---------- learned facts (learning arm)
+    if learned_dir and Path(learned_dir).is_dir():
+        for f in sorted(Path(learned_dir).rglob("fold*.md")):
+            txt = f.read_text(encoding="utf-8", errors="replace")
+            n = sum(1 for l in txt.splitlines() if l.startswith("- "))
+            docs.append(f"<details><summary><strong>Learned · {esc(f.parent.name)} · {esc(f.stem)}</strong>"
+                        f"<span class='muted'> · {n} facts</span></summary><div class='doc'>{md(txt)}</div></details>")
+
     when = max((r["t"] for r in ok), default="")
     sha = str(rc.get("sha") or "")[:7]
     return PAGE.format(
@@ -251,7 +259,8 @@ def build(cfg: dict, rows: list[dict], verdicts: dict, row_key, expand) -> str:
         mark=MARK, repo=esc(meta.get("repo", repo)), sha=esc(sha), when=esc(when.replace("T", " ")),
         runs=sum(s["runs"] for s in stats.values()), model=esc(model), hero=hero, bars=bars, table=table, perq=perq,
         models=models_html, docs="".join(docs) or "<p class='muted'>No generated docs found.</p>",
-        built=dt.datetime.now().strftime("%Y-%m-%d %H:%M"))
+        built=dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        live=(f"<div class='live' role='status'><span class='dot'></span>{esc(status)}</div>" if status else ""))
 
 
 PAGE = """<!doctype html>
@@ -291,16 +300,51 @@ code{{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:color-mix
 pre{{overflow-x:auto;background:color-mix(in srgb,var(--line) 30%,transparent);padding:10px;border-radius:8px;font-size:12px}}
 pre.mermaid{{background:#fff;color:#0B1B33}}
 .lnk{{color:var(--acc)}}footer{{color:var(--ink3);font-size:13px;text-align:center}}
+.live{{display:inline-flex;gap:8px;align-items:center;border:1px solid var(--acc);border-radius:999px;padding:4px 12px;font-size:14px;margin:4px 0}}
+.dot{{width:8px;height:8px;border-radius:50%;background:var(--acc);animation:p 1.4s ease-in-out infinite}}
+@keyframes p{{50%{{opacity:.25}}}}@media (prefers-reduced-motion:reduce){{.dot{{animation:none}}}}
 @media (max-width:520px){{.brow{{grid-template-columns:92px 1fr auto}}.big{{font-size:26px}}}}
 </style></head>
 <body><main>
 <header>{mark}<div><h1>Brieflet benchmark</h1><div class="meta">{repo} @ {sha} · reader {model} · {runs} runs · last run {when}</div></div></header>
+{live}
 <nav><a href="#results">Results</a><a href="#models">Models</a><a href="#docs">Generated docs</a></nav>
 <section id="results"><h2>Results</h2>{hero}{bars}{table}{perq}</section>
 <section id="models"><h2>Models</h2>{models}</section>
 <section id="docs"><h2>Generated docs (Brieflet setup)</h2>{docs}</section>
 <footer>Built {built} by <code>python -m bench dashboard</code>. Raw rows: runs.jsonl · judge.jsonl</footer>
 </main>
+<script>
+// Live: re-check this page every 15 s, reload only when it changed; keep scroll + open sections.
+(() => {{
+  const K = "bl-state";
+  try {{
+    const st = JSON.parse(sessionStorage.getItem(K) || "null");
+    if (st) {{
+      document.querySelectorAll("details").forEach((d, i) => {{ if (st.open.includes(i)) d.open = true; }});
+      addEventListener("load", () => scrollTo(0, st.y));
+      sessionStorage.removeItem(K);
+    }}
+  }} catch (e) {{}}
+  let tag = null;
+  const sig = r => (r.headers.get("etag") || "") + (r.headers.get("last-modified") || "");
+  async function check() {{
+    try {{
+      const r = await fetch(location.pathname, {{method: "HEAD", cache: "no-store"}});
+      const s = sig(r);
+      if (tag === null) tag = s;
+      else if (s && s !== tag) {{
+        try {{
+          const open = [...document.querySelectorAll("details")].flatMap((d, i) => d.open ? [i] : []);
+          sessionStorage.setItem(K, JSON.stringify({{y: scrollY, open}}));
+        }} catch (e) {{}}
+        location.reload();
+      }}
+    }} catch (e) {{}}
+  }}
+  check(); setInterval(check, 15000);
+}})();
+</script>
 <script type="module">
 try {{
   const m = await import("https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs");

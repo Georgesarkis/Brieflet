@@ -216,7 +216,9 @@ def learn(cfg: dict, yes: bool, only: str | None) -> int:
     else:
         print(f"learning pass: {n} runs, $0 extra")
     out = results_file(cfg).with_name("learn.jsonl")
+    out.parent.mkdir(parents=True, exist_ok=True)
     run_id = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    n_done = 0
     with tempfile.TemporaryDirectory(prefix="brieflet-learn-") as t:
         tmp = Path(t)
         for repo, m, arm, i, f in todo:
@@ -236,6 +238,12 @@ def learn(cfg: dict, yes: bool, only: str | None) -> int:
                            arm=arm, fold=i + 1, q=qid, learned=added, dropped=dropped)
                 with open(out, "a") as fh:
                     fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+                n_done += 1
+                if (wd / L.FILE).exists():
+                    d = learned_file(cfg, repo, m["name"], arm, i)
+                    d.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy(wd / L.FILE, d)
+                dashboard(cfg, f"Learning: {n_done}/{n} runs · fold{i + 1} {qid}", quiet=True)
                 print(f"learn {repo} {m['name']} {arm} fold{i + 1} {qid}: +{added} facts"
                       + (f", dropped {len(dropped)}" if dropped else "") + (f"  ERROR {row['error']}" if row.get("error") else ""))
                 errs = errs + 1 if row.get("error") else 0
@@ -297,6 +305,8 @@ def run(cfg: dict, yes: bool, only: str | None, resume: bool = False) -> int:
     done = {(r["repo"], r["model"], r["arm"], r["q"], r["rep"]) for r in rows(cfg) if not r.get("error")} if resume else set()
     if resume:
         print(f"resume: skipping {len(done)} runs that already worked")
+    n_done, todo_n = 0, max(0, tot["runs"] - sum(len(qs) for _, __, arm, qs in matrix(cfg, only) if is_learn(cfg, arm))
+                            - len(done))
     with tempfile.TemporaryDirectory(prefix="brieflet-bench-") as t:
         tmp = Path(t)
         for repo in cfg["repos"]:
@@ -325,6 +335,8 @@ def run(cfg: dict, yes: bool, only: str | None, resume: bool = False) -> int:
                                        question=q["text"])
                             with open(out, "a") as fh:
                                 fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+                            n_done += 1
+                            dashboard(cfg, f"Running: {n_done}/{todo_n} runs · {arm} {q['id']}", quiet=True)
                             errors_in_a_row = errors_in_a_row + 1 if row.get("error") else 0
                             tin = row["input_tokens"] + row["cache_read"] + row["cache_write"]
                             print(f"{repo} {m['name']} {q['id']} #{r} {arm:14} in={tin:>8,} out={row['output_tokens']:>6,} "
@@ -402,6 +414,7 @@ def judge(cfg: dict, yes: bool) -> int:
             fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
             fh.flush()
             print(f"{i}/{len(todo)} {r['q']} {r['arm']:14} score={rec['score']}")
+            dashboard(cfg, f"Judging: {i}/{len(todo)} answers", quiet=True)
             fails = fails + 1 if rec["score"] is None else 0
             if fails >= 3:
                 msg = "Brieflet judge stopped: 3 failures in a row (usage limit?). Run judge again later, it continues."
@@ -454,13 +467,17 @@ def report(cfg: dict) -> int:
     return 0
 
 
-def dashboard(cfg: dict) -> None:
-    """Rebuilt after every run / judge so the page is always current (geolinux serves it on :8097)."""
+def dashboard(cfg: dict, status: str = "", quiet: bool = False) -> None:
+    """Rebuilt after EVERY row (run / learn / judge); the page reloads itself when it changes (geolinux serves :8097)."""
     from .dashboard import build
     out = results_file(cfg).with_name("dashboard.html")
     try:
-        out.write_text(build(cfg, rows(cfg), verdicts(cfg), row_key, expand), encoding="utf-8")
-        print(f"dashboard: {out}")
+        html = build(cfg, rows(cfg), verdicts(cfg), row_key, expand, status, results_file(cfg).parent / "learned")
+        tmp = out.with_suffix(".tmp")
+        tmp.write_text(html, encoding="utf-8")
+        tmp.replace(out)  # atomic: the page never sees a half-written file
+        if not quiet:
+            print(f"dashboard: {out}")
     except Exception as e:  # never let the page break a finished run
         print(f"dashboard not rebuilt: {e}")
 
@@ -478,7 +495,9 @@ def main(argv=None) -> int:
     if a.cmd == "plan":
         plan(cfg, a.only); return 0
     if a.cmd == "learn":
-        return learn(cfg, a.yes, a.only)
+        rc = learn(cfg, a.yes, a.only)
+        dashboard(cfg)
+        return rc
     if a.cmd == "run":
         rc = run(cfg, a.yes, a.only, a.resume)
         dashboard(cfg)
