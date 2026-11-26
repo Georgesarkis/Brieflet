@@ -24,8 +24,10 @@ ARM_TEXT = {
     "none": "Code only. No docs.",
     "graphify-ast": "Graphify code graph + a pointer to it.",
     "brieflet": "Brieflet docs: AI_CONTEXT, diagram, decisions. No graph.",
-    "brieflet-graph": "Brieflet docs + the Graphify graph.",
+    "brieflet-graph": "Brieflet docs + the Graphify graph files together (the 22 Nov setup).",
 }
+LABEL = {"none": "No docs", "graphify-ast": "Graphify only", "brieflet": "Brieflet", "brieflet-graph": "Brieflet + Graphify"}
+lab = lambda a: LABEL.get(a, a)
 SUPPORTED = {
     "Writers (make the docs)": [
         ("Ollama, local", "qwen3.5:9b (labels) + Bonsai 27B (prose) by default; any Ollama model", "$0"),
@@ -148,7 +150,7 @@ def build(cfg: dict, rows: list[dict], verdicts: dict, row_key, expand) -> str:
             tiles.append((f"{s['quality']:.2f} vs {stats['none']['quality']:.2f}", "answer quality (0–3)"))
         hero = '<div class="tiles">' + "".join(f'<div class="tile"><div class="big">{esc(a)}</div><div class="sub">{esc(b)}</div></div>'
                                                for a, b in tiles) + "</div>"
-        hero = (f'<p class="lede">With <strong>{esc(best)}</strong> docs, {esc(model)} answered the same {len(qs)} questions '
+        hero = (f'<p class="lede">With <strong>{esc(lab(best))}</strong> docs, {esc(model)} answered the same {len(qs)} questions '
                 f'(the ones every setup finished):</p>' + hero)
     elif not stats:
         hero = '<p class="lede">No benchmark runs yet. Run <code>python -m bench run</code>, then refresh this page.</p>'
@@ -162,8 +164,8 @@ def build(cfg: dict, rows: list[dict], verdicts: dict, row_key, expand) -> str:
             w = s["tokens"] / mx * 100
             vs = f" ({(s['tokens'] / base - 1) * 100:+.0f}%)" if base and arm != "none" else ""
             cls = "bar acc" if arm.startswith("brieflet") else "bar"
-            tip = f"{arm}: {s['tokens']:,.0f} input tokens{vs}, {s['secs']:.0f} s, ${s['usd']:.3f} at API price"
-            rows_html.append(f'<div class="brow"><div class="blab">{esc(arm)}</div><div class="btrack">'
+            tip = f"{lab(arm)}: {s['tokens']:,.0f} input tokens{vs}, {s['secs']:.0f} s, ${s['usd']:.3f} at API price"
+            rows_html.append(f'<div class="brow"><div class="blab">{esc(lab(arm))}</div><div class="btrack">'
                              f'<div class="{cls}" style="width:{w:.1f}%" title="{esc(tip)}" tabindex="0"></div></div>'
                              f'<div class="bval">{s["tokens"] / 1000:,.0f}k{esc(vs)}</div></div>')
         bars = ('<h3>Input tokens, sum over all questions (median per question)</h3><div class="bars" role="img" '
@@ -176,7 +178,7 @@ def build(cfg: dict, rows: list[dict], verdicts: dict, row_key, expand) -> str:
         for arm, s in stats.items():
             q = f"{s['quality']:.2f}" if s["quality"] is not None else "–"
             pg = f"{s['per_good']:,.0f}" if s["per_good"] else "–"
-            tr.append(f"<tr><td><strong>{esc(arm)}</strong><div class='muted'>{esc(ARM_TEXT.get(arm, ''))}</div></td>"
+            tr.append(f"<tr><td><strong>{esc(lab(arm))}</strong><div class='muted'>{esc(ARM_TEXT.get(arm, ''))}</div></td>"
                       f"<td class='n'>{s['tokens']:,.0f}</td><td class='n'>{s['secs']:.0f}</td><td class='n'>${s['usd']:.3f}</td>"
                       f"<td class='n'>{q}</td><td class='n'>{s['good']}/{s['n_scored']}</td><td class='n'>{pg}</td></tr>")
         table = ('<div class="tw"><table><thead><tr><th>Setup</th><th>Input tokens</th><th>Seconds</th><th>Cost at API price</th>'
@@ -187,7 +189,7 @@ def build(cfg: dict, rows: list[dict], verdicts: dict, row_key, expand) -> str:
     perq = ""
     if stats:
         qtext = {q["id"]: q["text"] for q in yaml.safe_load(open(expand(cfg, rc["questions"])))["questions"]}
-        head = "".join(f"<th>{esc(a)}</th>" for a in stats)
+        head = "".join(f"<th>{esc(lab(a))}</th>" for a in stats)
         body = []
         for q in qs:
             cells = []
