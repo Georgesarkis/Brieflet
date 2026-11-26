@@ -2,6 +2,7 @@
 
   python -m bench plan   [-c bench.yaml]                      matrix + cost estimate. Never spends.
   python -m bench run    [-c bench.yaml] --yes [--only MODEL]  runs it. Paid runners need --yes AND estimate ≤ max_usd.
+  python -m bench judge  [-c bench.yaml] [--yes]               quality 0-3 per answer (free via Claude Code by default).
   python -m bench report [-c bench.yaml]                      median table per repo × model × arm.
 
 Money rule: nothing that costs money runs without `--yes`, and `run` re-checks the estimate against max_usd first.
@@ -21,6 +22,7 @@ from pathlib import Path
 
 import yaml
 
+from . import judge as J
 from . import runners
 
 HERE = Path(__file__).resolve().parent
@@ -211,13 +213,71 @@ def run(cfg: dict, yes: bool, only: str | None) -> int:
     return 0
 
 
+def judge_file(cfg: dict) -> Path:
+    return results_file(cfg).with_name("judge.jsonl")
+
+
+def verdicts(cfg: dict) -> dict:
+    f = judge_file(cfg)
+    out = {}
+    if f.exists():
+        for l in open(f):
+            if l.strip():
+                v = json.loads(l)
+                out[v["key"]] = v
+    return out
+
+
+def row_key(r: dict) -> str:
+    return f'{r["run"]}|{r["repo"]}|{r["model"]}|{r["arm"]}|{r["q"]}|{r["rep"]}'
+
+
+def judge(cfg: dict, yes: bool) -> int:
+    jc = cfg.get("judge") or {"runner": "claude_code", "model": "opus"}
+    done = verdicts(cfg)
+    todo = []
+    for r in rows(cfg):
+        if r.get("error") or row_key(r) in done:
+            continue
+        refs = J.refs_for(expand(cfg, cfg["repos"][r["repo"]]["questions"])).get(r["q"])
+        if refs:
+            todo.append((r, refs))
+    if not todo:
+        print("nothing to judge"); return 0
+    chars = sum(len(J.SYSTEM) + len(J.prompt(r["question"], refs, r.get("answer") or "")) for r, refs in todo)
+    if jc.get("runner", "claude_code") == "claude_code":
+        print(f"{len(todo)} answers to judge with Claude Code ({jc.get('model', 'opus')}) on your login: $0 extra.")
+    else:
+        p = cfg["_prices"]["anthropic"].get(jc["model"])
+        if not p:
+            print(f"Refused: no price for judge model {jc['model']}"); return 2
+        est = (chars / J.CHARS_PER_TOKEN * p["input"] + len(todo) * 600 * p["output"]) / 1e6
+        print(f"{len(todo)} answers to judge with {jc['model']} via API: estimate ${est:.2f}.")
+        if not yes:
+            print("Refused: paid judge needs --yes."); return 2
+        if est > float(cfg.get("max_usd", 0)):
+            print(f"Refused: estimate > max_usd ${cfg.get('max_usd', 0)}."); return 2
+    with open(judge_file(cfg), "a") as fh:
+        for i, (r, refs) in enumerate(todo, 1):
+            raw, use = J.ask(jc, J.prompt(r["question"], refs, r.get("answer") or ""))
+            v = J.parse(raw)
+            rec = {"key": row_key(r), "q": r["q"], "arm": r["arm"], "model": r["model"], "repo": r["repo"],
+                   "judge": jc.get("model"), "verdict": v, "score": J.score(len(refs["must"]), v) if v else None, **use}
+            fh.write(json.dumps(rec, ensure_ascii=False) + "\n")
+            fh.flush()
+            print(f"{i}/{len(todo)} {r['q']} {r['arm']:14} score={rec['score']}")
+    return 0
+
+
 def report(cfg: dict) -> int:
     rs = [r for r in rows(cfg) if not r.get("error")]
     if not rs:
         print("no results yet"); return 0
     med = lambda xs: st.median(xs) if xs else 0
-    L = ["| repo | model | arm | input tokens (sum of q medians) | vs none | seconds | USD (API price) | ok/all |",
-         "|---|---|---|---|---|---|---|---|"]
+    vd = verdicts(cfg)
+    L = ["| repo | model | arm | input tokens (sum of q medians) | vs none | seconds | USD (API price) | ok/all "
+         "| quality 0-3 (mean) | good answers (≥2) | input tokens per good answer |",
+         "|---|---|---|---|---|---|---|---|---|---|---|"]
     allrows = rows(cfg)
     for repo in sorted({r["repo"] for r in rs}):
         for model in sorted({r["model"] for r in rs if r["repo"] == repo}):
@@ -234,24 +294,34 @@ def report(cfg: dict) -> int:
                     base = tin
                 vs = f"{(tin / base - 1) * 100:+.0f}%" if base and arm != "none" else ""
                 n_all = sum(1 for r in allrows if r["repo"] == repo and r["model"] == model and r["arm"] == arm)
-                L.append(f"| {repo} | {model} | {arm} | {tin:,.0f} | {vs} | {secs:.0f} | {usd:.3f} | {len(g)}/{n_all} |")
+                sc = [vd[row_key(r)]["score"] for r in g if row_key(r) in vd and vd[row_key(r)]["score"] is not None]
+                good = sum(1 for x in sc if x >= 2)
+                tok_all = sum(r["input_tokens"] + r["cache_read"] + r["cache_write"] for r in g if row_key(r) in vd)
+                qual = f"{st.mean(sc):.2f} (n={len(sc)})" if sc else "–"
+                per_good = f"{tok_all / good:,.0f}" if good else "–"
+                L.append(f"| {repo} | {model} | {arm} | {tin:,.0f} | {vs} | {secs:.0f} | {usd:.3f} | {len(g)}/{n_all} "
+                         f"| {qual} | {good}/{len(sc)} | {per_good} |")
     print("\n".join(L))
-    print("\nTokens only. Quality (judge scores) comes next: fewer tokens with a worse answer is not a win.")
+    if not vd:
+        print("\nNo quality scores yet: run `judge`. Fewer tokens with a worse answer is not a win.")
     return 0
 
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m bench")
-    ap.add_argument("cmd", choices=["plan", "run", "report"])
+    ap.add_argument("cmd", choices=["plan", "run", "judge", "report"])
     ap.add_argument("-c", "--config", default="bench.yaml")
     ap.add_argument("--yes", action="store_true", help="allow paid runs (after reading `plan`)")
     ap.add_argument("--only", help="only this model name from the config")
     a = ap.parse_args(argv)
+    sys.stdout.reconfigure(line_buffering=True)  # progress shows up in a nohup log right away
     cfg = load(a.config)
     if a.cmd == "plan":
         plan(cfg, a.only); return 0
     if a.cmd == "run":
         return run(cfg, a.yes, a.only)
+    if a.cmd == "judge":
+        return judge(cfg, a.yes)
     return report(cfg)
 
 

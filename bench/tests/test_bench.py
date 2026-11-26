@@ -116,3 +116,29 @@ def test_anthropic_loop_with_mock(tmp_path, monkeypatch):
     assert r["answer"] == "X is in x.cs" and r["turns"] == 2 and r["input_tokens"] == 110 and r["cache_read"] == 200
     assert seen[1]["messages"][-1]["content"][0]["content"] == "x.cs"
     assert abs(r["cost_usd"] - (110 * 2 + 50 * 10 + 200 * 0.1 + 20 * 2.5) / 1e6) < 1e-12
+
+
+def test_judge_free_and_report(setup, monkeypatch, capsys):
+    p, tmp = setup
+    (tmp / "q.refs.yaml").write_text(yaml.safe_dump({"q1": {"must": ["basket in Basket.cs", "uses gRPC"]}}))
+    assert b.main(["run", "-c", str(p)]) == 0
+    calls = []
+    def fake_ask(jc, text):
+        calls.append(text)
+        return json.dumps({"must": [True, len(calls) % 2 == 0], "wrong_claims": []}), {"cost_usd": 0}
+    monkeypatch.setattr(b.J, "ask", fake_ask)
+    assert b.main(["judge", "-c", str(p)]) == 0 and len(calls) == 4
+    assert b.main(["judge", "-c", str(p)]) == 0 and len(calls) == 4  # already judged: nothing new
+    capsys.readouterr()
+    b.main(["report", "-c", str(p)])
+    out = capsys.readouterr().out
+    assert "3.00 (n=2)" in out and "1.00 (n=2)" in out and "| 5,000 |" in out
+
+
+def test_judge_score_rule():
+    from bench.judge import score
+    assert score(2, {"must": [True, True], "wrong_claims": []}) == 3
+    assert score(3, {"must": [True, True, False], "wrong_claims": []}) == 2
+    assert score(3, {"must": [True, False, False], "wrong_claims": []}) == 1
+    assert score(2, {"must": [True, True], "wrong_claims": [{"severity": "major"}]}) == 0
+    assert score(2, {"must": [True, True], "wrong_claims": [{"severity": "minor"}]}) == 2

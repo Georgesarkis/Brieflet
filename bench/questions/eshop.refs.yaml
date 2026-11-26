@@ -1,0 +1,78 @@
+# Reference answers for eshop.yaml, checked against dotnet/eShop @ ab10e4c (26 Nov 2026) by reading the code.
+# Same answers hold at 3c6e531 for these points. The judge scores an answer by how many `must` points it gets right
+# and whether it states anything wrong. `nice` points are extra credit only. George: spot-check a few before
+# the numbers go public.
+q1:
+  must:
+    - "The web app (src/WebApp) gets the basket through BasketService / BasketState in src/WebApp/Services."
+    - "It calls Basket.API over gRPC (AddGrpcClient<Basket.BasketClient> with address http://basket-api, in src/WebApp/Extensions/Extensions.cs)."
+    - "Basket.API exposes a gRPC BasketService (src/Basket.API/Grpc/BasketService.cs, MapGrpcService) that loads the basket for the signed-in user id."
+    - "The basket is stored in Redis via RedisBasketRepository (src/Basket.API/Repositories)."
+  nice:
+    - "The call carries the user's token (AddAuthToken); Basket.API uses JWT bearer auth."
+q2:
+  must:
+    - "Register the new project in the Aspire AppHost (src/eShop.AppHost/AppHost.cs, AddDotnetProject/AddProject) and add .WithReference(newService) on the webapp resource."
+    - "Add a typed client in the web app (AddHttpClient or AddGrpcClient in src/WebApp/Extensions/Extensions.cs) using the service-discovery name, e.g. https+http://new-api."
+    - "Add a client/service class in src/WebApp/Services that the UI uses."
+  nice:
+    - "Add .AddAuthToken() if the API needs the user's token, and an Identity audience/scope for it."
+    - "If it uses events: RabbitMQ reference + AddRabbitMqEventBus / subscriptions."
+q3:
+  must:
+    - "Checkout in the web app (BasketState.CheckoutAsync) calls Ordering.API over HTTP (OrderingService.CreateOrder)."
+    - "Ordering.API creates the order (CreateOrderCommand, MediatR) and publishes OrderStartedIntegrationEvent; Basket.API handles it and deletes the basket."
+    - "OrderProcessor's GracePeriodManagerService publishes GracePeriodConfirmedIntegrationEvent; Ordering sets AwaitingValidation and publishes OrderStatusChangedToAwaitingValidationIntegrationEvent."
+    - "Catalog.API checks stock and publishes OrderStockConfirmed (or OrderStockRejected); Ordering moves to StockConfirmed and publishes OrderStatusChangedToStockConfirmedIntegrationEvent."
+    - "PaymentProcessor handles that and publishes OrderPaymentSucceeded (or OrderPaymentFailed, setting PaymentSucceeded); Ordering sets the order Paid and publishes OrderStatusChangedToPaidIntegrationEvent (Catalog reduces stock)."
+    - "All events go over the RabbitMQ event bus."
+q4:
+  must:
+    - "Names the main services: WebApp, Basket.API, Catalog.API, Ordering.API, OrderProcessor, PaymentProcessor, Identity.API, Webhooks.API (plus WebhookClient and the YARP mobile-bff)."
+    - "Ownership: basket (Redis), catalog/products (Postgres catalogdb), orders (Postgres orderingdb), identity/users (identitydb), webhooks subscriptions (webhooksdb)."
+    - "Communication: WebApp → Basket over gRPC, WebApp → Catalog and Ordering over HTTP, services exchange integration events over RabbitMQ."
+  nice:
+    - "Composed by the .NET Aspire AppHost (src/eShop.AppHost)."
+q5:
+  must:
+    - "PostgreSQL (pgvector image) with separate databases: catalogdb (Catalog.API), identitydb (Identity.API), orderingdb (Ordering.API and OrderProcessor), webhooksdb (Webhooks.API)."
+    - "Redis is used by Basket.API for baskets."
+    - "RabbitMQ ('eventbus') is the message broker used by Basket, Catalog, Ordering, OrderProcessor, PaymentProcessor, Webhooks and WebApp."
+  nice:
+    - "Defined in src/eShop.AppHost/AppHost.cs."
+q6:
+  must:
+    - "Identity.API is an IdentityServer (Duende) OpenID Connect provider."
+    - "WebApp (and WebhookClient) sign users in with OpenID Connect + cookies (AddAuthenticationServices, client id webapp)."
+    - "Backend APIs (Basket, Ordering, Webhooks) validate JWT bearer tokens via AddDefaultAuthentication in eShop.ServiceDefaults, with an audience per API from the Identity config section."
+    - "The web app forwards the user's access token to the APIs (AddAuthToken on its clients)."
+  nice:
+    - "The mobile BFF (YARP) only routes: /identity/{*any} to Identity.API, plus catalog/orders routes; it doesn't validate tokens itself."
+q7:
+  must:
+    - "Endpoint /api/catalog/items/withsemanticrelevance (v1 path param, v2 query) in src/Catalog.API/Apis/CatalogApi.cs (GetItemsBySemanticRelevance)."
+    - "CatalogAI (src/Catalog.API/Services/CatalogAI.cs) turns the search text into an embedding (384 dims) with the configured embedding generator."
+    - "Items are ordered by pgvector cosine distance between their stored Embedding and the query vector (Postgres)."
+    - "If no AI model is configured (CatalogAI.IsEnabled false) or no vector comes back, it falls back to a plain search by name (GetItemsByName)."
+  nice:
+    - "The embedding generator is Ollama or OpenAI/Foundry, switched in AppHost (useOllama / UseFoundry) and Catalog.API config."
+q8:
+  must:
+    - "WebApp: checkout UI + BasketCheckoutInfo/CreateOrderRequest (src/WebApp/Services/BasketState.cs, OrderingService)."
+    - "Ordering.API: CreateOrderCommand (+ handler/validator) and the OrdersApi request contract."
+    - "Ordering.Domain: the Order aggregate (price/total) and Ordering.Infrastructure EF mapping + a migration."
+  nice:
+    - "Events whose payload includes order totals may change (e.g. OrderStartedIntegrationEvent / status-changed events); payment would use the discounted total."
+    - "Mentions where discount codes would be validated (new service or Ordering)."
+q9:
+  must:
+    - "GracePeriodTime is 1 (minute) in src/OrderProcessor/appsettings.json under BackgroundTaskOptions."
+    - "Read in src/OrderProcessor/BackgroundTaskOptions.cs and used by GracePeriodManagerService (TimeSpan.FromMinutes)."
+  nice:
+    - "CheckUpdateTime 30 seconds is how often it checks; after the period the order goes to AwaitingValidation."
+q10:
+  must:
+    - "The exchange is named eshop_event_bus."
+    - "Defined as the ExchangeName constant in src/EventBusRabbitMQ/RabbitMQEventBus.cs."
+  nice:
+    - "It's a direct exchange; each service has its own queue named by EventBus:SubscriptionClientName."

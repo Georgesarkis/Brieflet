@@ -27,6 +27,10 @@ arms:
   brieflet-graph:          # everything the engine wrote (= the slide's blue bar)
     overlay: ["{artifacts}/{repo}/brieflet-graph"]
 
+judge:                     # quality scores: Claude Code (Opus) on your login, $0 extra
+  runner: claude_code
+  model: opus
+
 models:
   - name: sonnet-sub
     runner: claude_code
