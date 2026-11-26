@@ -81,3 +81,13 @@ Docs generation for ours-local and graphify-full: geolinux (GPU). Claude answeri
 1. New public repo for the product + benchmark (name?).
 2. OK to spend ~$40–120 API price, or start Sonnet-only?
 3. Who checks reference answers (George, a sample of ~10)?
+
+## Learning arm (`learn: true`)
+
+Tests the self-improving `LEARNED.md`. `bench learn` runs each fold's questions once, with an extra ask: end the answer
+with `LEARNED:` + up to 3 lines `- fact → \`path\`` for what the docs lacked. Lines are checked (path exists in the repo,
+no duplicates, no secret-looking text) and pile up in `results/<name>/learned/<repo>/<model>/<arm>/foldN.md`.
+`bench run` then measures each question with LEARNED.md built from the OTHER folds only. Learning runs go to
+`learn.jsonl`, not `runs.jsonl`, and count in `plan`. Read: does a later question get cheaper because an earlier,
+different question already dug the code? Leak risk stays low (separate questions), but related questions can share facts;
+that is the point, and it is what happens in real use.

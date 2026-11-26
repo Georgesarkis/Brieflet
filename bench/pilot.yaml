@@ -26,6 +26,12 @@ arms:
     overlay: ["{artifacts}/{repo}/brieflet"]
   brieflet-graph:          # everything the engine wrote (= the slide's blue bar)
     overlay: ["{artifacts}/{repo}/brieflet-graph"]
+  brieflet-learn:          # Brieflet + LEARNED.md: learns on q1-5, measured on q6-10 (and back). `bench learn` first
+    overlay: ["{artifacts}/{repo}/brieflet"]
+    learn: true
+
+learn:
+  folds: 2                 # q1-5 / q6-10
 
 judge:                     # quality scores: Claude Code (Opus) on your login, $0 extra
   runner: claude_code
@@ -42,4 +48,5 @@ prior_tokens:
   graphify-ast: {input: 115000, output: 2000}
   brieflet: {input: 26000, output: 2000}
   brieflet-graph: {input: 26000, output: 2000}
+  brieflet-learn: {input: 26000, output: 2000}
   default: {input: 80000, output: 2000}

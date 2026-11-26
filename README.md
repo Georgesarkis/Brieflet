@@ -19,12 +19,18 @@ python -m brieflet init path/to/repo --llm anthropic --yes   # Haiku labels, Son
 Writes `AI_CONTEXT.md`, `CLAUDE.md` (pointer), `docs/architecture/components.md` and `docs/decisions/` + `DECISIONS.md`.
 `--out DIR` writes somewhere else instead of into the repo. Today it understands **.NET Aspire** repos only.
 
+**Self-improving:** it also writes `LEARNED.md`. The `CLAUDE.md` rule tells the assistant: if the docs didn't answer and
+you had to search the code, add one line `- <fact> → \`path\`` there. So the next question doesn't dig the same code
+again. Every `brieflet init` keeps those lines but drops ones whose file is gone, duplicates and secret-looking text
+(max 60 lines).
+
 ## Benchmark
 
 ```
 pip install pyyaml anthropic openai
 cp bench/bench.example.yaml bench/bench.yaml     # edit repos, arms, models
 python -m bench plan -c bench/bench.yaml         # matrix + cost estimate, spends nothing
+python -m bench learn -c bench/bench.yaml        # only for arms with `learn: true`: learning pass per fold
 python -m bench run  -c bench/bench.yaml         # free runners only; paid ones need --yes and estimate ≤ max_usd
 python -m bench report -c bench/bench.yaml
 python -m pytest bench/tests                     # offline tests, no keys
@@ -34,6 +40,9 @@ Runners: `claude_code` (Claude Code on your Claude login: no extra money, uses y
 `anthropic` (Sonnet / Opus / Haiku via API key), `openai` (API key, set the model + price in `bench/prices.yaml`),
 `fake` (offline). The API runners share the same three read-only tools and system prompt. Compare arms within one
 model; different runners are different harnesses.
+
+Learning is measured fairly: questions are split in folds (default 2). The arm learns on fold 1 and is measured on
+fold 2 with only fold 1's facts, and the other way round, so it never sees facts from the question it is scored on.
 
 Spec and fairness rules: [`bench/SPEC.md`](bench/SPEC.md).
 

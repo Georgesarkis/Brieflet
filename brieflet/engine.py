@@ -17,6 +17,7 @@ from datetime import date
 from pathlib import Path
 
 from .components import Tree, clean_label, parse, render
+from . import learned
 from .llm import LLM, LLMError
 
 COMPONENTS = "docs/architecture/components.md"
@@ -37,7 +38,8 @@ Only search the code when it does not answer the question.
 
 - Component diagram: [docs/architecture/components.md](docs/architecture/components.md)
 - Architecture decisions: [DECISIONS.md](DECISIONS.md) → `docs/decisions/`
-"""
+- Facts found in the code later: [LEARNED.md](LEARNED.md)
+""" + learned.RULE
 
 SYS_LABEL = """You name boxes in a software architecture diagram. For each box give a label of 2-4 plain words saying
 what it does for the user or the system (e.g. "Online store UI", "Shopping basket", "Product catalog", "Event bus").
@@ -204,7 +206,8 @@ class Init:
             f"Diagram: [{COMPONENTS}]({COMPONENTS}).", "",
             "## How they talk", "", *(talk or ["- see the arrows in the diagram"]), "",
             "## Where to look for X", "", *(where or ["- (no verified entries)"]), "",
-            "## More", "", f"- Architecture decisions: [{DECISIONS}]({DECISIONS})", ""])
+            "## More", "", f"- Architecture decisions: [{DECISIONS}]({DECISIONS})",
+            f"- Facts found in the code later: [{learned.FILE}]({learned.FILE})", ""])
         if len(txt) > CONTEXT_MAX_CHARS:
             self.notes.append(f"AI_CONTEXT cut to {CONTEXT_MAX_CHARS} chars")
             txt = txt[:CONTEXT_MAX_CHARS].rsplit("\n", 1)[0] + "\n"
@@ -259,6 +262,11 @@ class Init:
             files[DECISIONS] = self.decisions_md(adrs)
         if not (self.repo / CLAUDE_MD).exists() or self.out != self.repo:
             files[CLAUDE_MD] = CLAUDE_TXT
+        # LEARNED.md: keep what assistants added, drop lines whose files are gone
+        old = self.repo / learned.FILE
+        kept, dropped = learned.clean(learned.parse_lines(old.read_text(encoding="utf-8")) if old.exists() else [], self.repo)
+        files[learned.FILE] = learned.render(kept)
+        self.notes += [f"LEARNED.md dropped: {d}" for d in dropped]
         for rel, txt in files.items():
             p = self.out / rel
             p.parent.mkdir(parents=True, exist_ok=True)

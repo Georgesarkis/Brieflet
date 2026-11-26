@@ -25,8 +25,10 @@ ARM_TEXT = {
     "graphify-ast": "Graphify code graph + a pointer to it.",
     "brieflet": "Brieflet docs: AI_CONTEXT, diagram, decisions. No graph.",
     "brieflet-graph": "Brieflet docs + the Graphify graph files together (the 22 Nov setup).",
+    "brieflet-learn": "Brieflet + LEARNED.md: facts the AI had to dig out of the code on the OTHER half of the questions.",
 }
-LABEL = {"none": "No docs", "graphify-ast": "Graphify only", "brieflet": "Brieflet", "brieflet-graph": "Brieflet + Graphify"}
+LABEL = {"none": "No docs", "graphify-ast": "Graphify only", "brieflet": "Brieflet", "brieflet-graph": "Brieflet + Graphify",
+         "brieflet-learn": "Brieflet + learning"}
 lab = lambda a: LABEL.get(a, a)
 SUPPORTED = {
     "Writers (make the docs)": [

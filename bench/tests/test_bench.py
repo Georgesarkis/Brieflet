@@ -163,3 +163,45 @@ def test_stop_on_errors_then_resume(setup, monkeypatch):
     assert b.main(["run", "-c", str(p), "--resume"]) == 0
     ok = [json.loads(l) for l in open(tmp / "res" / "runs.jsonl") if not json.loads(l).get("error")]
     assert len(ok) == 6 and len({(r["arm"], r["rep"]) for r in ok}) == 6
+
+
+def test_learn_folds_never_leak(setup, monkeypatch):
+    """Learn on fold 1, measured on fold 2 with ONLY fold 1's facts (and the other way round)."""
+    p, tmp = setup
+    cfg = yaml.safe_load(p.read_text())
+    (tmp / "q.yaml").write_text(yaml.safe_dump({"questions": [
+        {"id": f"q{i}", "type": "trace", "text": f"question {i}"} for i in (1, 2, 3, 4)]}))
+    cfg["arms"]["learn"] = {"overlay": ["{artifacts}/{repo}/brieflet"], "learn": True}
+    p.write_text(yaml.safe_dump(cfg))
+    seen = {}
+
+    def fake(question, wd, m, price, cap):
+        lm = Path(wd, "LEARNED.md")
+        seen.setdefault(question.split("\n")[0], []).append(lm.read_text() if lm.exists() else "")
+        n = question.split()[1]
+        return {"input_tokens": 0, "cache_read": 10, "cache_write": 0, "output_tokens": 1, "turns": 1, "secs": 0.0,
+                "cost_usd": 0.0, "error": None,
+                "answer": f"answer\nLEARNED:\n- fact from q{n} → `src/Basket.cs`\n- bogus q{n} → `nope/gone.cs`"}
+    monkeypatch.setattr(b.runners, "get", lambda r: fake)
+    assert b.main(["run", "-c", str(p)]) == 2            # learn arm without a learning pass: refused
+    assert b.main(["learn", "-c", str(p)]) == 0
+    f1 = (tmp / "res" / "learned" / "demo" / "fake" / "learn" / "fold1.md").read_text()
+    assert "fact from q1" in f1 and "fact from q2" in f1 and "q3" not in f1 and "bogus" not in f1
+    seen.clear()
+    assert b.main(["run", "-c", str(p)]) == 0
+    q3 = next(t for t in seen["question 3"] if t)          # measured run of q3 (fold 2): sees fold 1 facts only
+    assert sum(1 for t in seen["question 3"] if t) == 2  # only the learn arm (2 repeats) has LEARNED.md
+    assert "fact from q1" in q3 and "fact from q3" not in q3
+    q1 = next(t for t in seen["question 1"] if t)
+    assert "fact from q3" in q1 and "fact from q1" not in q1
+
+
+def test_learned_md_prune(tmp_path):
+    from brieflet import learned as L
+    (tmp_path / "a.cs").write_text("x")
+    f = tmp_path / "LEARNED.md"
+    L.add(f, tmp_path, [{"fact": "A is here", "path": "a.cs"}, {"fact": "A is here", "path": "a.cs"},
+                        {"fact": "api_key: abc", "path": "a.cs"}, {"fact": "gone", "path": "b.cs"},
+                        {"fact": "escape", "path": "../etc/passwd"}])
+    rows = L.parse_lines(f.read_text())
+    assert [r["fact"] for r in rows] == ["A is here"]

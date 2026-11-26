@@ -62,3 +62,16 @@ def test_cloud_needs_yes(tmp_path, capsys):
     r = repo(tmp_path)
     assert main(["init", str(r), "--llm", "anthropic"]) == 2
     assert "Refused" in capsys.readouterr().out
+
+
+def test_learned_kept_and_pruned(tmp_path):
+    r = repo(tmp_path)
+    (r / "LEARNED.md").write_text("# Learned\n\n- Basket uses Redis → `src/Basket.API/Program.cs` · 2026-11-20\n"
+                                  "- Old thing → `src/Removed/Old.cs`\n")
+    out = tmp_path / "out"
+    res = Init(r, FakeLLM("ollama"), out, log=lambda *a: None).run(Init(r, FakeLLM("ollama"), out).plan())
+    txt = (out / "LEARNED.md").read_text()
+    assert "Basket uses Redis" in txt and "Old thing" not in txt
+    assert any("src/Removed/Old.cs" in n for n in res["notes"])
+    claude = (out / "CLAUDE.md").read_text()
+    assert "LEARNED.md" in claude and "had to search the code" in claude

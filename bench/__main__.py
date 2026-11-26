@@ -1,6 +1,7 @@
 """Brieflet benchmark: does a short AI context make a model read fewer tokens and answer faster, without worse answers?
 
   python -m bench plan   [-c bench.yaml]                      matrix + cost estimate. Never spends.
+  python -m bench learn  [-c bench.yaml] [--yes] [--only MODEL]  learning pass for arms with `learn:` (writes LEARNED.md per fold).
   python -m bench run    [-c bench.yaml] --yes [--only MODEL] [--resume]  runs it. Paid runners need --yes AND estimate ≤ max_usd.
   python -m bench judge  [-c bench.yaml] [--yes]               quality 0-3 per answer (free via Claude Code by default).
   python -m bench dashboard [-c bench.yaml]                   one HTML page: results, models, generated docs.
@@ -22,6 +23,8 @@ import tempfile
 from pathlib import Path
 
 import yaml
+
+from brieflet import learned as L
 
 from . import judge as J
 from . import runners
@@ -108,7 +111,7 @@ def plan(cfg: dict, only: str | None = None, quiet: bool = False) -> dict:
     tot = {"runs": 0, "paid_runs": 0, "low": 0.0, "high": 0.0, "unpriced": set(), "sub_runs": 0, "sub_usd": 0.0}
     lines = [f"{'repo':10} {'model':12} {'arm':14} {'runs':>5} {'tokens/run':>11} {'basis':18} {'est. USD':>15}"]
     for repo, m, arm, qs in matrix(cfg, only):
-        n = len(qs) * reps
+        n = len(qs) * reps + (len(qs) if is_learn(cfg, arm) else 0)  # + one learning pass
         tok, basis = per_run_tokens(cfg, arm, m["name"])
         est = estimate_run(tok, price_of(cfg, m))
         tot["runs"] += n
@@ -137,6 +140,113 @@ def plan(cfg: dict, only: str | None = None, quiet: bool = False) -> dict:
         if tot["unpriced"]:
             print(f"No price for: {', '.join(sorted(tot['unpriced']))} → fill bench/prices.yaml or they can't run.")
     return tot
+
+
+def is_learn(cfg: dict, arm: str) -> bool:
+    return bool((cfg["arms"][arm] or {}).get("learn"))
+
+
+def folds(cfg: dict, repo: str) -> list[list[str]]:
+    """Question ids split in N folds (default 2: first half / second half). Learn on one, measure on the others."""
+    ids = [q["id"] for q in questions(cfg, repo)]
+    n = int((cfg.get("learn") or {}).get("folds", 2))
+    k = -(-len(ids) // n)
+    return [ids[i:i + k] for i in range(0, len(ids), k)]
+
+
+def fold_of(cfg: dict, repo: str, qid: str) -> int:
+    return next(i for i, f in enumerate(folds(cfg, repo)) if qid in f)
+
+
+def learned_file(cfg: dict, repo: str, model: str, arm: str, fold: int) -> Path:
+    return results_file(cfg).parent / "learned" / repo / model / arm / f"fold{fold + 1}.md"
+
+
+def add_rule(wd: Path) -> None:
+    cm = wd / "CLAUDE.md"
+    txt = cm.read_text(encoding="utf-8") if cm.exists() else ""
+    if "LEARNED.md" not in txt or "When the docs were not enough" not in txt:
+        cm.write_text(txt.rstrip() + "\n" + L.RULE, encoding="utf-8")
+
+
+def prepare_learn(cfg: dict, repo: str, model: str, arm: str, qid: str, tmp: Path) -> Path:
+    """Measured run of a learn arm: base arm + LEARNED.md made from the OTHER folds only (never this question)."""
+    fold = fold_of(cfg, repo, qid)
+    dst = tmp / f"{repo}-{arm}-{model}-test{fold + 1}"
+    if dst.exists():
+        return dst
+    shutil.copytree(prepare(cfg, repo, arm, tmp), dst)
+    entries = []
+    for i in range(len(folds(cfg, repo))):
+        if i == fold:
+            continue
+        f = learned_file(cfg, repo, model, arm, i)
+        if not f.exists():
+            raise SystemExit(f"arm {arm}: {f} missing. Run `python -m bench learn` first.")
+        entries += L.parse_lines(f.read_text(encoding="utf-8"))
+    kept, _ = L.clean(entries, dst)
+    (dst / L.FILE).write_text(L.render(kept), encoding="utf-8")
+    add_rule(dst)
+    return dst
+
+
+def learn(cfg: dict, yes: bool, only: str | None) -> int:
+    """One pass per fold: answer the fold's questions with the 'LEARNED:' ask; facts pile up in that fold's LEARNED.md."""
+    arms = [a for a in cfg["arms"] if is_learn(cfg, a)]
+    if not arms:
+        print("no arm has `learn: true`"); return 0
+    todo = []
+    for repo in cfg["repos"]:
+        for m in cfg["models"]:
+            if only and m["name"] != only:
+                continue
+            for arm in arms:
+                for i, f in enumerate(folds(cfg, repo)):
+                    todo.append((repo, m, arm, i, f))
+    n = sum(len(f) for *_, f in todo)
+    paid_n = sum(len(f) for _, m, *__, f in todo if paid(m))
+    if paid_n:
+        hi = sum(len(f) * (estimate_run(per_run_tokens(cfg, arm, m["name"])[0], price_of(cfg, m)) or (0, 9e9))[1]
+                 for _, m, arm, __, f in todo if paid(m))
+        print(f"learning pass: {n} runs, {paid_n} paid, high estimate ${hi:.2f}")
+        if not yes:
+            print("Refused: paid learning runs need --yes."); return 2
+        if hi > float(cfg.get("max_usd", 0)):
+            print(f"Refused: ${hi:.2f} > max_usd {cfg.get('max_usd', 0)}."); return 2
+    else:
+        print(f"learning pass: {n} runs, $0 extra")
+    out = results_file(cfg).with_name("learn.jsonl")
+    run_id = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+    with tempfile.TemporaryDirectory(prefix="brieflet-learn-") as t:
+        tmp = Path(t)
+        for repo, m, arm, i, f in todo:
+            base = prepare(cfg, repo, arm, tmp)
+            wd = tmp / f"{repo}-{arm}-{m['name']}-learn{i + 1}"
+            shutil.copytree(base, wd)
+            (wd / L.FILE).write_text(L.render([]), encoding="utf-8")
+            add_rule(wd)
+            fn, price = runners.get(m["runner"]), price_of(cfg, m)
+            qs = {q["id"]: q for q in questions(cfg, repo)}
+            errs = 0
+            for qid in f:
+                row = fn(qs[qid]["text"] + L.PROMPT_SUFFIX, wd, m, price, float(cfg.get("max_usd_per_run", 1.0)))
+                facts = L.from_answer(row.get("answer") or "")
+                added, dropped = L.add(wd / L.FILE, wd, facts) if facts else (0, [])
+                row.update(run=run_id, t=dt.datetime.now().isoformat(timespec="seconds"), repo=repo, model=m["name"],
+                           arm=arm, fold=i + 1, q=qid, learned=added, dropped=dropped)
+                with open(out, "a") as fh:
+                    fh.write(json.dumps(row, ensure_ascii=False) + "\n")
+                print(f"learn {repo} {m['name']} {arm} fold{i + 1} {qid}: +{added} facts"
+                      + (f", dropped {len(dropped)}" if dropped else "") + (f"  ERROR {row['error']}" if row.get("error") else ""))
+                errs = errs + 1 if row.get("error") else 0
+                if errs >= 3:
+                    print("learning stopped: 3 errors in a row (usage limit?). Run `bench learn` again later."); return 4
+            dst = learned_file(cfg, repo, m["name"], arm, i)
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy(wd / L.FILE, dst)
+            print(f"  → {dst}")
+    notify(cfg, f"Brieflet learning pass done ({n} runs). Next: python -m bench run --resume")
+    return 0
 
 
 def prepare(cfg: dict, repo: str, arm: str, tmp: Path) -> Path:
@@ -175,6 +285,11 @@ def run(cfg: dict, yes: bool, only: str | None, resume: bool = False) -> int:
             print("\nRefused: paid runs need --yes (after you've read the estimate above)."); return 2
         if tot["high"] > max_usd:
             print(f"\nRefused: high estimate ${tot['high']:.2f} > max_usd ${max_usd}. Lower repeats/questions or raise max_usd."); return 2
+    missing = [str(learned_file(cfg, repo, m["name"], arm, i)) for repo in cfg["repos"] for m in cfg["models"]
+               if not only or m["name"] == only for arm in cfg["arms"] if is_learn(cfg, arm)
+               for i in range(len(folds(cfg, repo))) if not learned_file(cfg, repo, m["name"], arm, i).exists()]
+    if missing:
+        print(f"\nRefused: learning arm has no LEARNED.md yet ({missing[0]}). Run `python -m bench learn` first."); return 2
     reps, per_run_cap = cfg.get("repeats", 3), float(cfg.get("max_usd_per_run", 1.0))
     out = results_file(cfg)
     run_id = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -199,7 +314,8 @@ def run(cfg: dict, yes: bool, only: str | None, resume: bool = False) -> int:
                                 nxt = estimate_run(tok, price)[1]
                                 if spent + min(nxt, per_run_cap) > max_usd:
                                     print(f"STOP: spent ${spent:.2f}, next run could pass max_usd ${max_usd}."); return 3
-                            wd = prepare(cfg, repo, arm, tmp)
+                            wd = (prepare_learn(cfg, repo, m["name"], arm, q["id"], tmp) if is_learn(cfg, arm)
+                                  else prepare(cfg, repo, arm, tmp))
                             row = fn(q["text"], wd, m, price, per_run_cap)
                             if paid(m):
                                 spent += row.get("cost_usd") or 0
@@ -351,7 +467,7 @@ def dashboard(cfg: dict) -> None:
 
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(prog="python -m bench")
-    ap.add_argument("cmd", choices=["plan", "run", "judge", "report", "dashboard"])
+    ap.add_argument("cmd", choices=["plan", "learn", "run", "judge", "report", "dashboard"])
     ap.add_argument("-c", "--config", default="bench.yaml")
     ap.add_argument("--yes", action="store_true", help="allow paid runs (after reading `plan`)")
     ap.add_argument("--only", help="only this model name from the config")
@@ -361,6 +477,8 @@ def main(argv=None) -> int:
     cfg = load(a.config)
     if a.cmd == "plan":
         plan(cfg, a.only); return 0
+    if a.cmd == "learn":
+        return learn(cfg, a.yes, a.only)
     if a.cmd == "run":
         rc = run(cfg, a.yes, a.only, a.resume)
         dashboard(cfg)
