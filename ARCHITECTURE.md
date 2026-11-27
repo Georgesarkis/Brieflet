@@ -36,8 +36,10 @@ brieflet/
   domain/            components.py (Component, Link, ComponentGraph) · decisions.py (DecisionCandidate,
                      DecisionRecord) · learned.py (LearnedFact + pruning rules) · model_text.py (secret filter, plain text)
   application/       ports.py · generate_brief.py (the use case) · prompts.py · model_answers.py (checks model JSON)
-  infrastructure/    git_snapshot.py · folder.py · llm/ (gateway, backends, json_reply) ·
-                     dotnet/ (aspire_scanner.py, apphost_statements.py, decision_scanner.py)
+  infrastructure/    git_snapshot.py · folder.py · llm/ (gateway, backends, json_reply) · scanners.py (chains) ·
+                     dotnet/ (aspire_scanner.py, apphost_statements.py, decision_scanner.py) ·
+                     generic/ (any language: manifests.py, compose.py, tech.py, workspace_scanner.py,
+                     grouping.py, decision_scanner.py)
   presentation/      cli.py · brief_controller.py · brief_presenter.py ·
                      views/ (ai_context_md, components_md, decisions_md, learned_md, claude_md, footer)
   bootstrap.py       composition root
@@ -47,7 +49,9 @@ brieflet/
 
 1. `cli.py` parses the arguments and asks `bootstrap.py` for a `BriefController`.
 2. `GenerateBrief.plan()` asks the `ComponentScanner` for the component graph and the `DecisionScanner` for
-   decision candidates. No model is called, so `--plan` can show the cost first.
+   decision candidates. No model is called, so `--plan` can show the cost first. The scanner is a chain
+   (`FirstFound`): the .NET Aspire scanner first, then the any-language `WorkspaceScanner`. Decision scanners all
+   add candidates (`AllDecisions`); the generic one stays out of Aspire repos so their output does not change.
 3. `GenerateBrief.run()` calls the `LanguageModel` for labels, the AI_CONTEXT prose and one record per decision.
    `model_answers.py` drops anything it can't verify (paths not in the repo, secret-looking text) and adds a note.
 4. The use case returns a `Brief` (data only). `brief_presenter.py` renders it with the views, the controller writes
@@ -77,7 +81,9 @@ The benchmark uses the engine as a library: `brieflet.domain.learned` (fact rule
 
 | You want to… | Add… |
 |---|---|
-| support a new kind of repo (Node, Python, plain .NET) | a `ComponentScanner` + `DecisionScanner` in `infrastructure/<language>/`, picked in `bootstrap.py` |
+| support a new manifest type or language | a reader in `infrastructure/generic/manifests.py` (`READERS`) |
+| teach it a new database / queue / image | `infrastructure/generic/tech.py` (data only) |
+| a repo type with its own model of the system (like Aspire) | a `ComponentScanner` + `DecisionScanner` in `infrastructure/<name>/`, put in the chain in `bootstrap.py` |
 | add a model backend | a plugin package: a class with `complete()`, `default_models`, `prices`, `paid`, registered under the `brieflet.llm_backends` entry point group (see `infrastructure/llm/backends.py`) |
 | add a benchmark reader / judge | a plugin package: `run()` under `brieflet.bench_runners`, `ask()` under `brieflet.bench_judges`, prices under `brieflet.bench_prices` |
 | change what a generated doc looks like | its view in `presentation/views/` (only there) |

@@ -9,7 +9,7 @@ what it does for the user or the system (e.g. "Online store UI", "Shopping baske
 No quotes, no brackets, no product names that are not in the input.
 Answer ONLY with JSON: {"labels": {"<id>": "<label>"}}"""
 
-DECISION_SYSTEM = """You write an Architecture Decision Record (ADR) for a .NET microservices repo from the evidence given
+DECISION_SYSTEM = """You write an Architecture Decision Record (ADR) for a software repo from the evidence given
 (commit messages, changed files, code excerpts). Write only what the evidence supports; when you have to
 guess the motive, say "probably". Short plain sentences. No markdown headings, no code blocks.
 Answer ONLY with JSON: {"title": "<max 10 words, imperative, e.g. Add a wishlist service>",
@@ -29,6 +29,8 @@ LEARNED_ASK = ("\n\n(After your answer: if the project docs did not already cont
                "'- <fact, max 25 words> → `path/to/file`'. If the docs were enough, end with the line LEARNED: none)")
 
 MAX_OUT = {"labels": 400, "context": 1200, "decision": 900}
+MAX_FOLDERS = 60
+NOT_CODE = {"node_modules", "vendor", "dist", "build", "target", "obj", "bin", "__pycache__"}
 
 
 def component_table(graph: ComponentGraph, labels: dict[str, str]) -> list[str]:
@@ -42,16 +44,30 @@ def label_prompt(graph: ComponentGraph) -> str:
     for c in graph.components:
         talks = [l.target + (f" ({l.label})" if l.label else "") for l in graph.outgoing(c.id)]
         lines.append(f"- id {c.id}: name {c.name}, kind {c.kind}" + (f", folder {c.path}" if c.path else "")
+                     + (f", entry {c.entry}" if c.entry else "")
                      + (f", tech {c.tech}" if c.tech else "")
                      + (f", packages {', '.join(c.packages[:8])}" if c.packages else "")
                      + (f", talks to {', '.join(talks)}" if talks else ""))
     return "BOXES:\n" + "\n".join(lines)
 
 
+def top_folders(files: list[str], limit: int = MAX_FOLDERS) -> list[str]:
+    """Folders up to two levels deep, the ones with most files first (any language: src/, packages/, apps/, cmd/, …)."""
+    counts: dict[str, int] = {}
+    for f in files:
+        parts = f.split("/")
+        top = parts[:min(2, len(parts) - 1)]
+        if top and not any(p.startswith(".") or p in NOT_CODE for p in top):
+            d = "/".join(top)
+            counts[d] = counts.get(d, 0) + 1
+    parents = {d.split("/")[0] for d in counts if "/" in d}
+    leaves = [d for d in counts if d not in parents]   # "tests/X" makes "tests" redundant
+    return sorted(sorted(leaves, key=lambda d: -counts[d])[:limit])
+
+
 def context_prompt(graph: ComponentGraph, labels: dict[str, str], files: list[str]) -> str:
-    tops = sorted({"/".join(f.split("/")[:2]) for f in files if f.startswith(("src/", "tests/")) and f.count("/") >= 2})
     return ("COMPONENT TABLE (from code):\n| Box | What it is | Where | Talks to |\n" + "\n".join(component_table(graph, labels))
-            + "\n\nTOP FOLDERS:\n" + "\n".join(tops[:60]))
+            + "\n\nTOP FOLDERS:\n" + "\n".join(top_folders(files)))
 
 
 def decision_prompt(c: DecisionCandidate) -> str:
