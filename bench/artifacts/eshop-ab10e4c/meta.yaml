@@ -1,6 +1,11 @@
 # Who wrote these docs. Shown on the dashboard.
 repo: dotnet/eShop
 sha: ab10e4c68fd26369578ebfb3fd1ccf3b867d0444
+source: open
+license: MIT
+language: C#
+files: 612          # fallback when the checkout isn't on this machine (measured 27 Nov 2026)
+loc: 24360
 generated: 2026-11-22
 source: geolinux dev_docs worker (Brieflet's engine before it was split out), bootstrap run on eshop-demo 1c0ace6
 hardware: RTX 2070 8 GB (geolinux home server)

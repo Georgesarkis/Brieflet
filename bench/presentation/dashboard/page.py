@@ -6,7 +6,7 @@ MARK = ('<svg viewBox="0 0 120 120" width="36" height="36" aria-hidden="true"><r
         'stroke="#5BC8FF" stroke-width="12" stroke-linejoin="round"/><path d="M44 24V97H37a7 7 0 0 1-7-7V31a7 7 0 0 1 7-7z" '
         'fill="#F4F7FB"/><circle cx="94" cy="91" r="6.5" fill="#FFB547"/></svg>')
 
-PAGE = """<!doctype html>
+HEAD = """<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{title}</title>
 <style>
@@ -47,17 +47,16 @@ pre.mermaid{{background:#fff;color:#0B1B33}}
 .dot{{width:8px;height:8px;border-radius:50%;background:var(--acc);animation:p 1.4s ease-in-out infinite}}
 @keyframes p{{50%{{opacity:.25}}}}@media (prefers-reduced-motion:reduce){{.dot{{animation:none}}}}
 @media (max-width:520px){{.brow{{grid-template-columns:92px 1fr auto}}.big{{font-size:26px}}}}
+.chips{{display:flex;gap:8px;flex-wrap:wrap;margin:12px 0 4px}}
+.chip{{display:flex;gap:10px;align-items:center;text-align:left;font:inherit;color:var(--ink2);background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:8px 12px;cursor:pointer;min-height:44px}}
+.chip[aria-pressed=true]{{border-color:var(--acc);color:var(--ink);box-shadow:inset 0 0 0 1px var(--acc)}}
+.chip:focus-visible{{outline:2px solid var(--acc);outline-offset:2px}}.chip b{{font-weight:600;overflow-wrap:anywhere}}
+.chip .src{{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ink3)}}.chip .facts{{font-size:12px;color:var(--ink3)}}
+.rhead{{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline}}
 </style></head>
-<body><main>
-<header>{mark}<div><h1>Brieflet benchmark</h1><div class="meta">{repo} @ {sha} · reader {model} · {runs} runs · last run {when}</div></div></header>
-{live}
-<nav><a href="#results">Results</a><a href="#models">Models</a><a href="#docs">Generated docs</a></nav>
-<section id="results"><h2>Results</h2>{hero}{bars}{table}{perq}</section>
-<section id="models"><h2>Models</h2>{models}</section>
-<section id="docs"><h2>Generated docs (Brieflet setup)</h2>{docs}</section>
-<footer>Built {built} by <code>python -m bench dashboard</code>. Raw rows: runs.jsonl · judge.jsonl</footer>
-</main>
-<script>
+"""
+
+LIVE = """<script>
 // Live: re-check this page every 15 s, reload only when it changed; keep scroll + open sections.
 (() => {{
   const K = "bl-state";
@@ -88,12 +87,24 @@ pre.mermaid{{background:#fff;color:#0B1B33}}
   check(); setInterval(check, 15000);
 }})();
 </script>
-<script type="module">
+"""
+
+MERMAID = """<script type="module">
 try {{
   const m = await import("https://cdn.jsdelivr.net/npm/mermaid@10.9.1/dist/mermaid.esm.min.mjs");
   m.default.initialize({{startOnLoad:false, theme:"neutral"}});
   await m.default.run({{querySelector:"pre.mermaid"}});
 }} catch (e) {{ /* offline: the diagram source stays visible */ }}
 </script>
-</body></html>
 """
+
+PAGE = HEAD + """<body><main>
+<header>{mark}<div><h1>Brieflet benchmark</h1><div class="meta">{repo} @ {sha} · reader {model} · {runs} runs · last run {when}</div></div></header>
+{live}
+<nav><a href="../index.html">All repos</a><a href="#results">Results</a><a href="#models">Models</a><a href="#docs">Generated docs</a></nav>
+<section id="results"><h2>Results</h2>{hero}{bars}{table}{perq}</section>
+<section id="models"><h2>Models</h2>{models}</section>
+<section id="docs"><h2>Generated docs (Brieflet setup)</h2>{docs}</section>
+<footer>Built {built} by <code>python -m bench dashboard</code>. Raw rows: runs.jsonl · judge.jsonl</footer>
+</main>
+""" + LIVE + MERMAID + "</body></html>\n"
