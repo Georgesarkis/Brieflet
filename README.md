@@ -68,6 +68,9 @@ Shipped question sets (10 questions each, written before any run, reference poin
 `bench/pilot.yaml` = dotnet/eShop (Aspire microservices), `bench/eshoponweb.yaml` = eShopOnWeb (.NET monolith;
 none vs Brieflet vs CodeGraph, 30 runs).
 
+`python -m bench dashboard` (and every run/judge) also rebuilds `results/index.html`: one button per tested repo
+(full name, open/closed source, size, language); pick one or several to compare.
+
 Spec and fairness rules: [`bench/SPEC.md`](bench/SPEC.md).
 
 ## Code layout

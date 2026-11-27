@@ -1,6 +1,11 @@
 # Who wrote these docs. Shown on the dashboard.
 repo: dotnet-architecture/eShopOnWeb
 sha: 4da8212117e87d808d4bbc7da6286fd2147ce606
+source: open
+license: MIT
+language: C#
+files: 315          # fallback when the checkout isn't on this machine (measured 27 Nov 2026)
+loc: 10893
 generated: 2026-11-27
 source: "`python -m brieflet init` (any-language engine, Brieflet PR 5) on geolinux, `--out bench/artifacts/eshoponweb-4da8212/brieflet`"
 hardware: RTX 2070 8 GB (geolinux home server)
