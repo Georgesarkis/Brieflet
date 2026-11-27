@@ -2,12 +2,12 @@
 from __future__ import annotations
 
 from ..application.plan_benchmark import BenchPlan, PlanLine
-from ..domain.pricing import is_paid
+from ..domain.pricing import is_paid, is_subscription
 
 
 def _usd(l: PlanLine) -> str:
     if not is_paid(l.model):
-        return "$0 (subscription)" if l.model["runner"] == "claude_code" else "$0"
+        return "$0 (subscription)" if is_subscription(l.model) else "$0"
     if l.estimate is None:
         return "NO PRICE"
     return f"${l.runs * l.estimate[0]:.2f}–{l.runs * l.estimate[1]:.2f}"

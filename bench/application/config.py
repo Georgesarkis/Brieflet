@@ -46,7 +46,8 @@ class BenchConfig:
 
     @property
     def judge(self) -> dict:
-        return self.data.get("judge") or {"runner": "claude_code", "model": "opus"}
+        """bench.yaml `judge:` block ({runner, model, billing?}). There is no default judge: it needs a plugin."""
+        return self.data.get("judge") or {}
 
     def arm(self, name: str) -> dict:
         return self.data["arms"][name] or {}

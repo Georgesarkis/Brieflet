@@ -68,11 +68,31 @@ def test_init_writes_files(tmp_path):
     assert not (r / AI_CONTEXT).exists()  # --out never touches the repo
 
 
-def test_cloud_needs_yes(tmp_path, capsys):
+class PaidBackend:
+    """A plugin backend that costs money; must never be called without --yes."""
+    default_models = {"small": "paid-small", "write": "paid-write"}
+    prices = {"paid-small": (1.0, 2.0), "paid-write": (3.0, 6.0)}
+
+    def complete(self, *a):
+        raise AssertionError("paid backend called without --yes")
+
+
+def test_paid_plugin_needs_yes(tmp_path, capsys):
     from brieflet.__main__ import main
+    from brieflet.infrastructure.llm import backends
+    backends.register("paid-test", PaidBackend)
     r = repo(tmp_path)
-    assert main(["init", str(r), "--llm", "anthropic"]) == 2
-    assert "Refused" in capsys.readouterr().out
+    assert main(["init", str(r), "--llm", "paid-test"]) == 2
+    out = capsys.readouterr().out
+    assert "Cost estimate" in out and "$" in out and "Refused" in out
+
+
+def test_only_local_backend_built_in(tmp_path, capsys):
+    from brieflet.__main__ import main
+    from brieflet.infrastructure.llm import backends
+    assert set(backends.BUILT_IN) == {"ollama"}
+    assert main(["init", str(repo(tmp_path)), "--llm", "no-such-backend"]) == 2
+    assert "unknown backend no-such-backend" in capsys.readouterr().out
 
 
 def test_learned_kept_and_pruned(tmp_path):

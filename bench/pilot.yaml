@@ -37,9 +37,10 @@ arms:
 learn:
   folds: 2                 # q1-5 / q6-10
 
-judge:                     # quality scores: Claude Code (Opus) on your login, $0 extra
+judge:                     # quality scores: Claude Code (Opus) on your login, $0 extra (needs Brieflet Pro)
   runner: claude_code
   model: opus
+  billing: subscription
 
 models:
   - name: sonnet-sub

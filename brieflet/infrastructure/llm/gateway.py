@@ -1,44 +1,30 @@
 """LanguageModel port: two roles (`small` = box labels, `write` = prose) on one backend, every call counted.
 
-Ollama is local and free (default). Cloud backends cost money and are estimated BEFORE anything is sent.
+Ollama is local and free (default). A paid plugin backend is estimated BEFORE anything is sent.
 """
 from __future__ import annotations
 
 import time
 
 from ...application.ports import WRITE, ModelError
-from .backends import BACKENDS
+from .backends import backend_class
 from .json_reply import parse_json
 
-DEFAULT_MODELS = {
-    "ollama": {"small": "qwen3.5:9b", "write": "hf.co/prism-ml/Bonsai-27B-gguf:Q1_0"},
-    "anthropic": {"small": "claude-haiku-5-5", "write": "claude-sonnet-5-5"},
-    "openai": {"small": None, "write": None},  # set --small-model / --write-model
-}
-# USD per 1M tokens (input, output). Estimate only; check current prices before a big run.
-PRICES = {
-    "claude-haiku-5-5": (0.10, 0.50),
-    "claude-sonnet-5-5": (2.00, 10.00),
-    "claude-opus-5-5": (4.00, 20.00),
-}
 CHARS_PER_TOKEN = 3.5
 
 
 class ModelGateway:
     def __init__(self, backend: str = "ollama", small: str | None = None, write: str | None = None, client=None):
-        if backend not in BACKENDS:
-            raise ModelError(f"unknown backend {backend}")
         self.backend = backend
-        self.small = small or DEFAULT_MODELS[backend]["small"]
-        self.write = write or DEFAULT_MODELS[backend]["write"]
+        self.client = client or backend_class(backend)()
+        defaults = getattr(self.client, "default_models", None) or {}
+        self.small = small or defaults.get("small")
+        self.write = write or defaults.get("write")
         if not self.small or not self.write:
             raise ModelError(f"{backend}: set --small-model and --write-model")
-        self.client = client or BACKENDS[backend]()
+        self.paid: bool = getattr(self.client, "paid", True)   # unknown = paid, so the money gate applies
+        self.prices: dict = getattr(self.client, "prices", None) or {}
         self.calls: list[dict] = []
-
-    @property
-    def paid(self) -> bool:
-        return self.backend != "ollama"
 
     def model(self, role: str) -> str:
         return self.write if role == WRITE else self.small
@@ -55,8 +41,8 @@ class ModelGateway:
         if not self.paid:
             return 0.0
         total = 0.0
-        for role, chars, out in planned:
-            price = PRICES.get(self.model(role))
+        for role, chars, out in planned:   # prices: USD per 1M tokens (input, output), from the backend
+            price = self.prices.get(self.model(role))
             if not price:
                 return None
             total += (chars / CHARS_PER_TOKEN * price[0] + out * price[1]) / 1e6

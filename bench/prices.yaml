@@ -1,11 +1,5 @@
-# USD per 1M tokens. Used for the cost ESTIMATE and the live budget stop. Check before a paid run:
-#   Anthropic: https://www.anthropic.com/pricing   OpenAI: https://openai.com/api/pricing
-# A model with price: null can't be estimated, so `bench run` refuses to use it until you fill it in.
-anthropic:
-  claude-sonnet-5-5: {input: 2.00, output: 10.00, cache_read: 0.10, cache_write: 2.50}
-  claude-opus-5-5:   {input: 4.00, output: 20.00, cache_read: 0.20, cache_write: 5.00}
-  claude-haiku-5-5:  {input: 0.10, output: 0.50,  cache_read: 0.01, cache_write: 0.125}  # cache rates assumed, check
-openai:
-  # Fill in the model id + prices you want before running. Example shape:
-  # gpt-x: {input: 1.25, output: 10.00, cache_read: 0.125, cache_write: 1.25}
-  gpt-placeholder: null
+# USD per 1M tokens, one section per runner name. Used for the cost ESTIMATE and the live budget stop.
+# Shape:  <runner>: {<model>: {input: 1.25, output: 10.00, cache_read: 0.125, cache_write: 1.25}}
+# Plugin runners bring their own prices; a bench.yaml `prices:` block overrides both.
+# A paid model without a price can't be estimated, so `bench run` refuses to use it until you add one.
+{}

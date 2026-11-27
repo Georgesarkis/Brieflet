@@ -5,6 +5,7 @@ and lists wrong claims; the score is computed in domain/scoring.py, the same rul
 """
 from __future__ import annotations
 
+from ..domain.pricing import is_paid
 from ..domain.results import row_key
 from ..domain.scoring import parse_verdict, score
 from .config import BenchConfig
@@ -41,6 +42,9 @@ class JudgeAnswers:
         if not todo:
             self.log("nothing to judge")
             return Outcome.OK
+        if not jc.get("runner"):
+            self.log("Refused: no judge configured. Add a `judge:` block (runner + model) to the bench config.")
+            return Outcome.REFUSED
         if not self._money_gate(jc, todo, yes):
             return Outcome.REFUSED
         fails = 0
@@ -62,16 +66,16 @@ class JudgeAnswers:
         return Outcome.OK
 
     def _money_gate(self, jc: dict, todo: list, yes: bool) -> bool:
-        if jc.get("runner", "claude_code") == "claude_code":
-            self.log(f"{len(todo)} answers to judge with Claude Code ({jc.get('model', 'opus')}) on your login: $0 extra.")
+        if not is_paid(jc):
+            self.log(f"{len(todo)} answers to judge with {jc['runner']} ({jc.get('model')}): $0 extra.")
             return True
-        p = self.cfg.prices["anthropic"].get(jc["model"])
+        p = self.cfg.price(jc)
         if not p:
             self.log(f"Refused: no price for judge model {jc['model']}")
             return False
         chars = sum(len(SYSTEM) + len(prompt(r["question"], refs, r.get("answer") or "")) for r, refs in todo)
         est = (chars / CHARS_PER_TOKEN * p["input"] + len(todo) * OUT_TOKENS_PER_VERDICT * p["output"]) / 1e6
-        self.log(f"{len(todo)} answers to judge with {jc['model']} via API: estimate ${est:.2f}.")
+        self.log(f"{len(todo)} answers to judge with {jc['model']} ({jc['runner']}): estimate ${est:.2f}.")
         if not yes:
             self.log("Refused: paid judge needs --yes.")
         elif est > self.cfg.max_usd:

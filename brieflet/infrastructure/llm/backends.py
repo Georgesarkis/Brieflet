@@ -1,15 +1,25 @@
-"""One HTTP/SDK call per backend: (model, system, prompt, max_out) → (text, input tokens, output tokens).
+"""One HTTP call per backend: (model, system, prompt, max_out) → (text, input tokens, output tokens).
 
-SDKs are imported lazily, so the free local path needs only `requests`.
+Brieflet is local-first: the built-in backend is Ollama, free, on your machine. Other backends are plugins: a
+package registers a class under the `brieflet.llm_backends` entry point group (or calls `register()`), with
+`complete()`, `default_models = {"small": ..., "write": ...}`, `prices = {model: (usd_in, usd_out) per 1M}` and
+`paid = True`. A plugin backend counts as paid unless it says `paid = False`.
 """
 from __future__ import annotations
 
 import os
+from importlib.metadata import entry_points
 
 from ...application.ports import ModelError
 
+GROUP = "brieflet.llm_backends"
+
 
 class OllamaBackend:
+    paid = False
+    default_models = {"small": "qwen3.5:9b", "write": "hf.co/prism-ml/Bonsai-27B-gguf:Q1_0"}
+    prices: dict = {}
+
     def __init__(self, url: str | None = None, num_ctx: int = 12288, timeout_s: int = 300):
         self.url = url or os.environ.get("OLLAMA_URL", "http://localhost:11434")
         self.num_ctx, self.timeout_s = num_ctx, timeout_s
@@ -28,35 +38,29 @@ class OllamaBackend:
         return d["message"]["content"].strip(), d.get("prompt_eval_count") or 0, d.get("eval_count") or 0
 
 
-class AnthropicBackend:
-    def complete(self, model: str, system: str, prompt: str, max_out: int) -> tuple[str, int, int]:
-        import anthropic
-        try:
-            resp = anthropic.Anthropic().messages.create(
-                model=model, max_tokens=max(max_out, 1024), system=system + "\nAnswer with the JSON object only.",
-                messages=[{"role": "user", "content": prompt}])
-        except anthropic.APIStatusError as e:
-            raise ModelError(f"anthropic {e.status_code}: {e.message}") from e
-        except anthropic.APIConnectionError as e:
-            raise ModelError(f"anthropic connection: {e}") from e
-        if resp.stop_reason == "refusal":
-            raise ModelError("anthropic: refusal")
-        text = "".join(b.text for b in resp.content if b.type == "text")
-        return text.strip(), resp.usage.input_tokens or 0, resp.usage.output_tokens or 0
+BUILT_IN = {"ollama": OllamaBackend}
+_registered: dict[str, type] = {}
 
 
-class OpenAIBackend:
-    def complete(self, model: str, system: str, prompt: str, max_out: int) -> tuple[str, int, int]:
-        import openai
-        try:
-            resp = openai.OpenAI().chat.completions.create(
-                model=model, response_format={"type": "json_object"},
-                messages=[{"role": "system", "content": system}, {"role": "user", "content": prompt}])
-        except openai.APIStatusError as e:
-            raise ModelError(f"openai {e.status_code}: {e.message}") from e
-        except openai.APIConnectionError as e:
-            raise ModelError(f"openai connection: {e}") from e
-        return (resp.choices[0].message.content or "").strip(), resp.usage.prompt_tokens or 0, resp.usage.completion_tokens or 0
+def register(name: str, cls: type) -> None:
+    """Add a backend at runtime (plugins without packaging, tests)."""
+    _registered[name] = cls
 
 
-BACKENDS = {"ollama": OllamaBackend, "anthropic": AnthropicBackend, "openai": OpenAIBackend}
+def _plugins() -> dict:
+    return {ep.name: ep for ep in entry_points(group=GROUP)}
+
+
+def available() -> list[str]:
+    return sorted({*BUILT_IN, *_registered, *_plugins()})
+
+
+def backend_class(name: str) -> type:
+    if name in BUILT_IN:
+        return BUILT_IN[name]
+    if name in _registered:
+        return _registered[name]
+    ep = _plugins().get(name)
+    if ep is None:
+        raise ModelError(f"unknown backend {name}. Installed: {', '.join(available())}")
+    return ep.load()
