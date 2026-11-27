@@ -14,7 +14,11 @@ writers:
   - role: code graph (graphify-ast arm)
     model: none (Graphify 0.9.114, AST only, community labels off)
     runtime: local CLI
+  - role: code index (codegraph arm)
+    model: none (CodeGraph 1.6.4, tree-sitter + SQLite, built by `prepare` in each bench run)
+    runtime: local CLI
 arms:
   brieflet: AI_CONTEXT.md, CLAUDE.md, components diagram, 10 decision records, DECISIONS.md (no graph)
   graphify-ast: GRAPH_REPORT.md + graph.html + a 2-line CLAUDE.md pointer
   brieflet-graph: everything above together (the 22 Nov slide's "local docs" bar)
+  codegraph: CodeGraph's own install files (.mcp.json, .claude/settings.json with its prompt hook, .claude/CLAUDE.md), index built at run time

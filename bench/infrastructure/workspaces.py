@@ -1,4 +1,8 @@
-"""Workspaces: temp copies of a repo at the pinned commit with one arm's docs laid over it."""
+"""Workspaces: temp copies of a repo at the pinned commit with one arm's docs laid over it.
+
+An arm can also name shell commands: `prepare` runs once in its fresh copy (e.g. build a tool's index; not timed),
+`cleanup` runs when the temp area closes (e.g. stop a tool's background daemon). `{dir}` = the copy's path.
+"""
 from __future__ import annotations
 
 import shutil
@@ -21,8 +25,9 @@ class SetupError(Exception):
 
 
 class ArmWorkspaces:
-    def __init__(self, cfg: BenchConfig, store: ResultsStore, tmp: Path):
-        self.cfg, self.store, self.tmp = cfg, store, Path(tmp)
+    def __init__(self, cfg: BenchConfig, store: ResultsStore, tmp: Path, log=print):
+        self.cfg, self.store, self.tmp, self.log = cfg, store, Path(tmp), log
+        self._cleanups: list[tuple[str, Path]] = []
 
     def arm(self, repo: str, arm: str) -> Path:
         """Repo copy (no .git), our own docs stripped, the arm's overlay folders + CLAUDE.md on top. Made once."""
@@ -44,7 +49,19 @@ class ArmWorkspaces:
             shutil.copytree(ov, dst, dirs_exist_ok=True)
         if a.get("claude_md"):
             (dst / "CLAUDE.md").write_text(a["claude_md"])
+        for cmd in a.get("prepare", []):
+            self.log(f"prepare {arm}: {cmd}")
+            p = _sh(cmd, dst)
+            if p.returncode != 0:
+                raise SetupError(f"arm {arm}: prepare failed: {cmd}\n{(p.stderr or p.stdout)[-500:]}")
+        self._cleanups += [(cmd, dst) for cmd in a.get("cleanup", [])]
         return dst
+
+    def close(self) -> None:
+        """Run the arms' cleanup commands (best effort)."""
+        for cmd, d in self._cleanups:
+            _sh(cmd, d if d.exists() else self.tmp)
+        self._cleanups.clear()
 
     @staticmethod
     def _check_pinned(repo: str, src: Path, want: str) -> None:
@@ -101,6 +118,11 @@ class ArmWorkspaces:
         return f.read_text(encoding="utf-8") if f.exists() else None
 
 
+def _sh(cmd: str, d: Path) -> subprocess.CompletedProcess:
+    return subprocess.run(cmd.replace("{dir}", str(d)), shell=True, cwd=d, capture_output=True, text=True,
+                          stdin=subprocess.DEVNULL, timeout=3600)
+
+
 def _exists_in(root: Path, rel: str) -> bool:
     root = Path(root).resolve()
     p = (root / rel.split(":")[0].split("#")[0]).resolve()
@@ -119,5 +141,9 @@ def opener(cfg: BenchConfig, store: ResultsStore, prefix: str):
     @contextmanager
     def open_ws() -> Iterator[ArmWorkspaces]:
         with tempfile.TemporaryDirectory(prefix=prefix) as t:
-            yield ArmWorkspaces(cfg, store, Path(t))
+            ws = ArmWorkspaces(cfg, store, Path(t))
+            try:
+                yield ws
+            finally:
+                ws.close()
     return open_ws
