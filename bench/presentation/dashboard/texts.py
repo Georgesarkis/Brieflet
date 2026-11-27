@@ -7,10 +7,12 @@ ARM_TEXT = {
     "brieflet": "Brieflet docs: AI_CONTEXT, diagram, decisions. No graph.",
     "brieflet-graph": "Brieflet docs + the Graphify graph files together (the 22 Nov setup).",
     "brieflet-learn": "Brieflet + LEARNED.md: facts the AI had to dig out of the code on the OTHER half of the questions.",
+    "own-docs": "The repo's own hand-written AI docs as shipped (CLAUDE.md, AGENTS.md, rules). No Brieflet.",
     "codegraph": "CodeGraph as installed: local code index, MCP search tool + a hook that adds code to every question.",
 }
 LABEL = {"none": "No docs", "graphify-ast": "Graphify only", "brieflet": "Brieflet", "brieflet-graph": "Brieflet + Graphify",
-         "brieflet-learn": "Brieflet + learning", "codegraph": "CodeGraph"}
+         "brieflet-learn": "Brieflet + learning", "codegraph": "CodeGraph",
+         "own-docs": "Repo's own docs"}
 
 
 def lab(arm: str) -> str:

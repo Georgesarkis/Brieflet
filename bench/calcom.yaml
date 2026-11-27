@@ -1,0 +1,63 @@
+# Repo 3 (ROADMAP Day 5): a BIG TypeScript monorepo (Yarn + Turbo, ~120 workspace packages, ~490k lines).
+# Free: Claude Code on your own Claude login ($0 extra). 5 setups × 10 questions × 1 repeat = 50 runs
+# (one night + `--resume` in the morning if the plan limit hits).
+# Plus the learning pass first: `bench learn` = 10 runs (2 folds × 5 questions), in the day window.
+# Own results folder → http://geolinux:8097/calcom/dashboard.html (and the all-repos page).
+# Repo (pinned main of 13 Nov 2026):
+#   git clone --filter=blob:none https://github.com/calcom/cal.com ~/bench/repos/calcom-ae027bb
+#   git -C ~/bench/repos/calcom-ae027bb checkout ae027bb70e694e2d2c44569f398d6cbcee0389b1
+# Brieflet docs (local Ollama, $0), written once before the run:
+#   python -m brieflet init ~/bench/repos/calcom-ae027bb --out bench/artifacts/calcom-ae027bb/brieflet
+# cal.com ships its own AI docs (CLAUDE.md = AGENTS.md, agents/, .claude, .cursor, .opencode, specs/): stripped in every
+# arm so "none" really is no docs. Arm `own-docs` keeps them (George, 27 Nov): Brieflet vs hand-written AI docs.
+# Rival = CodeGraph (as on Day 2 + 4). Questions are paired across the 2 learning folds (see questions/calcom.yaml).
+repeats: 1
+max_usd: 0                 # nothing paid in this config
+max_usd_per_run: 1.00
+results: results/calcom
+notify_cmd: notify         # geolinux ntfy push when done (skipped if the command doesn't exist)
+
+repos:
+  calcom-ae027bb:
+    path: ~/bench/repos/calcom-ae027bb
+    sha: ae027bb70e694e2d2c44569f398d6cbcee0389b1
+    questions: questions/calcom.yaml
+    strip: [CLAUDE.md, AGENTS.md, AI_CONTEXT.md, DECISIONS.md, LEARNED.md, docs/architecture, docs/decisions,
+            agents, .claude, .cursor, .opencode, specs]
+
+artifacts: artifacts
+arms:
+  none: {}
+  own-docs:                # cal.com's own CLAUDE.md/AGENTS.md/agents/.claude rules as shipped, nothing of ours
+    keep_repo_docs: true
+  brieflet:                # AI_CONTEXT + diagram + decisions from `brieflet init`, no graph
+    overlay: ["{artifacts}/{repo}/brieflet"]
+  codegraph:               # CodeGraph as `codegraph install` ships it: MCP server + prompt hook + its CLAUDE.md text
+    overlay: ["{artifacts}/{repo}/codegraph"]          # its .mcp.json, .claude/settings.json, .claude/CLAUDE.md (v1.6.4)
+    prepare: ["CODEGRAPH_TELEMETRY=0 codegraph init --yes ."]   # builds .codegraph/ index once, not timed
+    cleanup: ["pkill -f 'codegraph.*serve.*{dir}' || true"]   # its MCP daemon outlives claude
+  brieflet-learn:          # Brieflet + LEARNED.md: learns on q1-5, measured on q6-10 (and back). `bench learn` first
+    overlay: ["{artifacts}/{repo}/brieflet"]
+    learn: true
+
+learn:
+  folds: 2                 # q1-5 / q6-10 (each question has a same-area twin in the other fold)
+
+judge:                     # quality scores: Claude Code (Opus) on your login, $0 extra (needs Brieflet Pro)
+  runner: claude_code
+  model: opus
+  billing: subscription
+
+models:
+  - name: sonnet-sub
+    runner: claude_code
+    model: sonnet
+    billing: subscription
+
+prior_tokens:              # guesses for `bench plan`; a big repo means more digging than eShop
+  none: {input: 150000, output: 3000}
+  brieflet: {input: 100000, output: 3000}
+  brieflet-learn: {input: 90000, output: 3000}
+  own-docs: {input: 150000, output: 3000}
+  codegraph: {input: 150000, output: 3000}
+  default: {input: 150000, output: 3000}

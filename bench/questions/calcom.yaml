@@ -1,0 +1,41 @@
+# Questions for calcom/cal.com @ ae027bb (pinned 27 Nov 2026, main of 13 Nov 2026; MIT "Cal.diy" community edition).
+# Repo 3 (ROADMAP Day 5): BIG TypeScript monorepo (Yarn + Turbo, ~120 workspace packages, ~490k lines).
+# Same type mix as the other sets (SPEC.md): 3 overview, 3 trace, 2 change, 2 detail. Written 27 Nov 2026 from the
+# code, BEFORE any arm was run. Don't edit after the first real run; add new ones as q11+ instead.
+#
+# Learning arm (2 folds: q1-5 / q6-10): each question in one fold has a "twin" in the other fold that touches the
+# same area of the code (q1↔q7 apps + API v2, q2↔q9 slots, q3↔q8 app store, q4↔q6 booking lifecycle,
+# q5↔q10 event-type limits). This is the "same team keeps asking about the same codebase" case. On eShop the
+# folds were unrelated, so LEARNED.md had nothing to reuse (Day 1). State this pairing whenever the result is shown.
+repo: calcom
+questions:
+  - id: q1
+    type: overview
+    text: "What are the main apps and packages in this monorepo, what does each one do, and how do the web app and API v2 share code?"
+  - id: q2
+    type: overview
+    text: "How are the free time slots on a public booking page computed? Name the main classes/files and the inputs they combine."
+  - id: q3
+    type: overview
+    text: "How does the app store work: how is an integration like Google Calendar registered, installed by a user, and loaded at runtime?"
+  - id: q4
+    type: trace
+    text: "A visitor books a slot on a public booking page. Trace the request from the booking form to the booking row in the database, and what happens right after (calendar, emails, webhooks)."
+  - id: q5
+    type: change
+    text: "I want a new event type setting 'max guests per booking' (a booker can add at most N extra guests): stored in the database, set in the event type Limits tab, and enforced when a booking is created. Which files must change?"
+  - id: q6
+    type: trace
+    text: "A booker cancels their booking from the booking page. Trace what runs, which checks can refuse the cancel, and what happens to the calendar event, webhooks, payments and emails."
+  - id: q7
+    type: trace
+    text: "An external app calls API v2 POST /v2/bookings with an API key. Trace the request: how the key is checked, which controller and service run, and which shared code creates the booking."
+  - id: q8
+    type: change
+    text: "I want to add a new calendar integration (a new calendar provider) to the app store. Which folders and files must I create or change?"
+  - id: q9
+    type: detail
+    text: "When slots are computed: what is the default minimum booking notice for an event type, how far apart are the slots when no slot interval is set, and how long is the slots result cached and where?"
+  - id: q10
+    type: detail
+    text: "What exactly does the event type setting 'limit active bookings per booker' do, where is it stored, where is it enforced, and can it be combined with recurring events?"

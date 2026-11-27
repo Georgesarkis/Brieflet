@@ -8,7 +8,7 @@ from bench.infrastructure.config_loader import load
 
 BENCH = Path(__file__).resolve().parents[1]
 TYPES = {"overview", "trace", "change", "detail"}
-CONFIGS = ["pilot.yaml", "eshoponweb.yaml"]
+CONFIGS = ["pilot.yaml", "eshoponweb.yaml", "calcom.yaml"]
 
 
 @pytest.mark.parametrize("name", CONFIGS)
@@ -31,7 +31,23 @@ def test_eshoponweb_is_one_night():
     assert {t: types.count(t) for t in TYPES} == {"overview": 3, "trace": 3, "change": 2, "detail": 2}
 
 
-def test_codegraph_overlay_is_shipped():
-    art = BENCH / "artifacts" / "eshoponweb-4da8212" / "codegraph"
+def test_calcom_is_one_night_with_learning():
+    cfg = load(BENCH / "calcom.yaml")
+    runs = sum(len(qs) for *_, qs in cfg.matrix(None)) * cfg.repeats
+    assert runs == 50                           # 5 setups × 10 q × 1 (own-docs added by George): night + --resume
+    assert set(cfg.arms) == {"none", "own-docs", "brieflet", "codegraph", "brieflet-learn"}
+    assert cfg.arm("own-docs").get("keep_repo_docs") and not cfg.arm("none").get("keep_repo_docs")
+    assert cfg.is_learn("brieflet-learn") and not cfg.is_learn("brieflet")
+    repo = "calcom-ae027bb"
+    types = [q["type"] for q in cfg.questions[repo]]
+    assert {t: types.count(t) for t in TYPES} == {"overview": 3, "trace": 3, "change": 2, "detail": 2}
+    assert cfg.folds(repo) == [["q1", "q2", "q3", "q4", "q5"], ["q6", "q7", "q8", "q9", "q10"]]
+    strip = set(cfg.repos[repo]["strip"])
+    assert {"CLAUDE.md", "AGENTS.md", "agents", ".claude", ".cursor"} <= strip   # cal.com ships its own AI docs
+
+
+@pytest.mark.parametrize("repo", ["eshoponweb-4da8212", "calcom-ae027bb"])
+def test_codegraph_overlay_is_shipped(repo):
+    art = BENCH / "artifacts" / repo / "codegraph"
     for f in [".mcp.json", ".claude/settings.json", ".claude/CLAUDE.md"]:
         assert (art / f).is_file(), f

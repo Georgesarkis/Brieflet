@@ -30,8 +30,9 @@ Writes `AI_CONTEXT.md`, `CLAUDE.md` (pointer), `docs/architecture/components.md`
   Dockerfiles, entry points (`main.py`, `src/main.rs`, `Program.cs`, start scripts) and dependencies between the
   projects. Known images and client libraries (Postgres, Redis, Kafka, RabbitMQ, …) become infrastructure boxes.
   A repo with no manifests gets one box per top code folder.
-- **Big monorepos** (100+ packages): the diagram keeps 15 boxes. Apps and the most used libraries stay, the rest
-  become one group box per folder (`packages/*`). Examples, tests, docs and `node_modules` are left out.
+- **Big monorepos** (100+ packages): the diagram keeps 15 boxes. Apps, the biggest and the most used libraries
+  stay, the rest become one group box per folder (`packages/*`). Dev-tool containers nobody calls and a Compose
+  service built from the whole repo are left out. Examples, tests, docs and `node_modules` are left out.
 
 Decision records come from what the code shows: Compose, Kubernetes, Terraform, CI, monorepo tools, gRPC/GraphQL
 schemas, and dependencies (web framework, database + ORM, message bus, auth, background jobs).
@@ -66,7 +67,9 @@ fold 2 with only fold 1's facts, and the other way round, so it never sees facts
 
 Shipped question sets (10 questions each, written before any run, reference points for the judge in `*.refs.yaml`):
 `bench/pilot.yaml` = dotnet/eShop (Aspire microservices), `bench/eshoponweb.yaml` = eShopOnWeb (.NET monolith;
-none vs Brieflet vs CodeGraph, 30 runs).
+none vs Brieflet vs CodeGraph, 30 runs), `bench/calcom.yaml` = cal.com (big TypeScript monorepo, ~120 packages;
+none vs its own AI docs vs Brieflet vs CodeGraph vs Brieflet+learning, 50 runs + 10 learning runs; each question has a same-area twin in
+the other fold, so it tests "the same team keeps asking about one codebase").
 
 `python -m bench dashboard` (and every run/judge) also rebuilds `results/index.html`: one button per tested repo
 (full name, open/closed source, size, language); pick one or several to compare.

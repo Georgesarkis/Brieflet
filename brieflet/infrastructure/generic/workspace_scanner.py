@@ -46,7 +46,7 @@ class WorkspaceScanner:
             g.add_folders(snapshot)
         comps, links = list(g.nodes.values()), list(g.links.values())
         if len(comps) > MAX_BOXES:
-            comps, links, refs = collapse(comps, links, g.refs, MAX_BOXES)
+            comps, links, refs = collapse(comps, links, g.refs, MAX_BOXES, _code_files(snapshot, comps))
             notes.append(f"{len(g.nodes)} parts found; diagram keeps {MAX_BOXES} boxes, the rest are grouped by folder")
         else:
             refs = g.refs
@@ -58,6 +58,17 @@ class WorkspaceScanner:
         graph = ComponentGraph(None, comps, links, refs, f"{origin}, Dockerfiles and the projects' dependencies")
         graph.notes = notes
         return graph
+
+
+def _code_files(snapshot, comps: list[Component]) -> dict[str, int]:
+    """Code files under each project folder (nested projects counted in their parent too)."""
+    code = [f for f in snapshot.files if f.endswith(CODE_EXT) and not skipped(f)]
+    out = {}
+    for c in comps:
+        if c.path is not None:
+            pre = "" if c.path in ("", ".") else c.path.rstrip("/") + "/"
+            out[c.id] = sum(1 for f in code if f.startswith(pre))
+    return out
 
 
 def _real_projects(projects: list[Project]) -> list[Project]:
