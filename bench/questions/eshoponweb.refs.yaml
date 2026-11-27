@@ -1,0 +1,82 @@
+# Reference answers for eshoponweb.yaml, checked against dotnet-architecture/eShopOnWeb @ 4da8212 (27 Nov 2026)
+# by reading the code. The judge scores an answer by how many `must` points it gets right and whether it states
+# anything wrong. `nice` points are extra credit only. George: spot-check a few before the numbers go public.
+q1:
+  must:
+    - "ApplicationCore: domain entities (CatalogItem, Basket, Order aggregates), interfaces (IRepository, IBasketService, IOrderService), services (BasketService, OrderService) and Ardalis specifications. Depends on nothing else in the solution."
+    - "Infrastructure: EF Core data access (CatalogContext, EfRepository, migrations, seed) and ASP.NET Identity (AppIdentityDbContext, IdentityTokenClaimService). Depends on ApplicationCore."
+    - "Web: the ASP.NET Core MVC + Razor Pages shop (catalog, basket, checkout, orders, account) that also hosts the Blazor admin. Depends on ApplicationCore, Infrastructure, BlazorAdmin and BlazorShared."
+    - "PublicApi: minimal-API endpoints (catalog items/brands/types, authenticate) with JWT auth and Swagger, used by the admin. Depends on ApplicationCore, Infrastructure and BlazorShared."
+    - "BlazorAdmin: Blazor WebAssembly admin UI for catalog CRUD that calls PublicApi over HTTP; BlazorShared: DTOs/models and constants shared by BlazorAdmin, Web and PublicApi."
+  nice:
+    - "Clean Architecture layout: dependencies point inward to ApplicationCore."
+    - "tests/ has UnitTests, IntegrationTests, FunctionalTests and PublicApiIntegrationTests."
+q2:
+  must:
+    - "Two SQL Server databases via EF Core: the catalog DB (CatalogContext: catalog items/brands/types, baskets, orders) and the identity DB (AppIdentityDbContext: ASP.NET Identity users/roles). Connection strings CatalogConnection and IdentityConnection in appsettings.json (LocalDB by default)."
+    - "Both are registered in src/Infrastructure/Dependencies.cs (ConfigureServices), used by Web (Development/Docker) and PublicApi; Web in other environments reads the connection strings from Azure Key Vault in src/Web/Program.cs."
+    - "Setting UseOnlyInMemoryDatabase=true switches both contexts to the EF Core in-memory provider (no SQL Server needed)."
+    - "Caching is in-process IMemoryCache, not Redis: CachedCatalogViewModelService in the Web app caches catalog pages/brands/types; BlazorAdmin caches lists in browser local storage (Cached*Decorator services)."
+  nice:
+    - "docker-compose.yml runs azure-sql-edge as the SQL Server for Docker."
+    - "All data access goes through EfRepository<T> (Ardalis.Specification RepositoryBase) over CatalogContext."
+q3:
+  must:
+    - "The Web app uses ASP.NET Core Identity with cookie authentication (AddIdentity + AddCookie in src/Web/Program.cs, cookie settings in Configuration/ConfigureCookieSettings.cs); users/roles live in the identity DB."
+    - "The Blazor admin gets its user from the Web app's UserController (GET /User), which returns the claims plus a JWT made by IdentityTokenClaimService; CustomAuthStateProvider puts that token in the HttpClient Authorization: Bearer header."
+    - "PublicApi validates that JWT with JwtBearer using the shared symmetric key AuthorizationConstants.JWT_SECRET_KEY (no issuer/audience check); write endpoints require the Administrators role."
+    - "PublicApi also has an authenticate endpoint (AuthenticateEndpoint) that signs in with username/password and returns a JWT."
+  nice:
+    - "The admin page /Admin is protected by [Authorize(Roles = Administrators)]; seed users demouser@microsoft.com and admin@microsoft.com."
+    - "Logout revokes the cookie through an IMemoryCache entry checked by RevokeAuthenticationEvents."
+q4:
+  must:
+    - "Basket/Index page (src/Web/Pages/Basket/Index.cshtml.cs) OnPost: for a guest it uses (or creates) a GUID stored in the 'eShop' basket cookie (Constants.BASKET_COOKIENAME) as the buyer id."
+    - "It calls BasketService.AddItemToBasket (src/ApplicationCore/Services/BasketService.cs), which loads or creates the Basket via IRepository<Basket> and Basket.AddItem (adds quantity if the item exists); saved in the catalog DB through EfRepository/CatalogContext."
+    - "On login (src/Web/Areas/Identity/Pages/Account/Login.cshtml.cs) TransferAnonymousBasketToUserAsync calls BasketService.TransferBasketAsync(anonymousId, userName): items are copied into the user's basket (created if missing), the anonymous basket is deleted, and the basket cookie is removed."
+  nice:
+    - "BasketWithItemsSpecification loads the basket with its items; BasketViewModelService maps it for the page."
+q5:
+  must:
+    - "The Checkout page (src/Web/Pages/Basket/Checkout.cshtml.cs, [Authorize]) OnPost loads the basket via BasketViewModelService, then BasketService.SetQuantities updates quantities."
+    - "OrderService.CreateOrderAsync (src/ApplicationCore/Services/OrderService.cs) loads the basket and its catalog items, builds OrderItems with a CatalogItemOrdered snapshot (id, name, picture URI) and the basket unit price, creates an Order and saves it with IRepository<Order>."
+    - "Then BasketService.DeleteBasketAsync deletes the basket and the user is redirected to the Success page."
+    - "All in-process in the Web app, one database (CatalogContext); no events, queue or payment service. The shipping address is hard-coded."
+  nice:
+    - "An empty basket throws EmptyBasketOnCheckoutException (Guard.Against.EmptyBasketOnCheckout) and redirects back to the basket page."
+q6:
+  must:
+    - "The Blazor admin Create page (src/BlazorAdmin/Pages/CatalogItemPage/Create.razor) calls ICatalogItemService.Create, which (through CachedCatalogItemServiceDecorator) is CatalogItemService.Create in src/BlazorAdmin/Services."
+    - "CatalogItemService uses HttpService.HttpPost to POST to PublicApi 'catalog-items' (ApiBase from baseUrls config) with the JWT bearer token."
+    - "PublicApi CreateCatalogItemEndpoint (POST api/catalog-items, Administrators role required) rejects duplicate names (CatalogItemNameSpecification, DuplicateException), creates a CatalogItem and saves it via IRepository<CatalogItem> (EfRepository → CatalogContext → SQL Server)."
+  nice:
+    - "The endpoint sets the picture to the default placeholder (eCatalog-item-default.png) because upload is disabled, and returns 201 with a CatalogItemDto."
+    - "Request/response models come from BlazorShared (CreateCatalogItemRequest/Response)."
+q7:
+  must:
+    - "ApplicationCore: add the property to CatalogItem (src/ApplicationCore/Entities/CatalogItem.cs), its constructor and UpdateDetails/CatalogItemDetails."
+    - "Infrastructure: map it in Data/Config/CatalogItemConfiguration.cs if needed and add an EF Core migration in src/Infrastructure/Data/Migrations (CatalogContext)."
+    - "PublicApi: add it to CatalogItemDto and the create/update request classes and endpoints (CreateCatalogItemEndpoint, UpdateCatalogItemEndpoint)."
+    - "Admin: add it to BlazorShared/Models (CatalogItem, CreateCatalogItemRequest) and to the BlazorAdmin CatalogItemPage razor pages (Create, Edit, Details/List)."
+    - "Shop: add it to src/Web/ViewModels/CatalogItemViewModel.cs, map it in Services/CatalogViewModelService.cs and show it in Pages/Shared/_product.cshtml."
+  nice:
+    - "Seed data in CatalogContextSeed; MappingProfile (AutoMapper) maps it automatically if names match; update tests."
+q8:
+  must:
+    - "Web: add a code field to the Checkout page (src/Web/Pages/Basket/Checkout.cshtml + Checkout.cshtml.cs) and pass it to the order service."
+    - "ApplicationCore: change IOrderService/OrderService.CreateOrderAsync to validate and apply the code, and store the discount on the Order entity (Order.Total() computes the total from items today); a discount entity/rule or repository lives in ApplicationCore."
+    - "Infrastructure: EF Core mapping (Data/Config/OrderConfiguration.cs, a new config if there is a discount-code table) plus a migration for CatalogContext."
+    - "No events, message contracts or other services are affected: it is a monolith; the only contract changes are the C# interfaces and view models."
+  nice:
+    - "Show the discount in the basket/order views (BasketViewModel, OrderViewModel/OrderDetailViewModel, MyOrders/Detail views); update unit tests for OrderService."
+q9:
+  must:
+    - "10 products per page: Constants.ITEMS_PER_PAGE in src/Web/Constants.cs, used by Pages/Index.cshtml.cs and CachedCatalogViewModelService."
+    - "Catalog cache: 30 seconds sliding expiration, CacheHelpers.DefaultCacheDuration in src/Web/Extensions/CacheHelpers.cs, used by CachedCatalogViewModelService (IMemoryCache)."
+  nice:
+    - "The Blazor admin caches its item list in local storage for 1 minute (CachedCatalogItemServiceDecorator)."
+q10:
+  must:
+    - "7 days: Expires = DateTime.UtcNow.AddDays(7) in IdentityTokenClaimService.GetTokenAsync (src/Infrastructure/Identity/IdentityTokenClaimService.cs)."
+  nice:
+    - "Signed with AuthorizationConstants.JWT_SECRET_KEY (HMAC-SHA256); the Web auth cookie lasts 60 minutes (ConfigureCookieSettings.ValidityMinutesPeriod), a different value."

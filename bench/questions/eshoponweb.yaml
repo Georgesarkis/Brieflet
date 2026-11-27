@@ -1,0 +1,36 @@
+# Questions for dotnet-architecture/eShopOnWeb @ 4da8212 (pinned 27 Nov 2026; the repo is archived, HEAD is final).
+# Same type mix as eshop.yaml (SPEC.md): 3 overview, 3 trace, 2 change, 2 detail. Written 27 Nov 2026 from the code,
+# BEFORE any arm was run. Don't edit after the first real run; add new ones as q11+ instead.
+# Monolith (no message bus), so the "events" style questions of eshop.yaml are replaced by in-process flows.
+repo: eshoponweb
+questions:
+  - id: q1
+    type: overview
+    text: "What are the main projects in this solution, what does each one do, and which project depends on which?"
+  - id: q2
+    type: overview
+    text: "Which databases and caches does the app use, which code talks to each, and how do you run it without SQL Server?"
+  - id: q3
+    type: overview
+    text: "How does authentication work across the MVC web app, the Blazor admin and the public API?"
+  - id: q4
+    type: trace
+    text: "A guest adds a product to the basket and then logs in. Trace what happens to the basket, with the files involved."
+  - id: q5
+    type: trace
+    text: "Trace checkout from the Checkout page to the order being saved. Which classes run, and what happens to the basket?"
+  - id: q6
+    type: trace
+    text: "An admin creates a new catalog item in the admin UI. Trace the request from the Blazor page to the database."
+  - id: q7
+    type: change
+    text: "I want to add a 'Rating' field to catalog items: stored in the database, shown in the shop and editable in the admin. Which files must change?"
+  - id: q8
+    type: change
+    text: "I want to add a discount code at checkout that lowers the order total. Which projects and files would I change?"
+  - id: q9
+    type: detail
+    text: "How many products does the shop home page show per page, how long is the catalog cached, and where are those values set?"
+  - id: q10
+    type: detail
+    text: "How long is the JWT token for the admin and the API valid, and where is that set?"
