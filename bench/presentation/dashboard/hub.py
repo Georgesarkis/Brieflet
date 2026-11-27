@@ -45,11 +45,11 @@ def chip(i: int, r: RepoInfo) -> str:
 
 def section(i: int, rp: Repo) -> str:
     r = rp.info
-    return (f'<details class="repo" data-i="{i}" id="repo-{esc(r.key)}"><summary><strong>{esc(r.name)}</strong>'
-            f'{(" <span class=muted>@ " + esc(r.sha) + "</span>") if r.sha else ""}</summary>'
+    return (f'<section class="repo" data-i="{i}" id="repo-{esc(r.key)}"><div class="rhead"><h2>{esc(r.name)}'
+            f'{(" <span class=muted>@ " + esc(r.sha) + "</span>") if r.sha else ""}</h2>'
+            f'<a class="lnk" href="{esc(rp.page)}">Full page: models + generated docs →</a></div>'
             f'<p class="muted">{source_badge(r)} · {esc(facts(r))} · reader {esc(rp.model)} · {rp.runs} runs'
-            f' · last run {esc(rp.when.replace("T", " "))} · <a class="lnk" href="{esc(rp.page)}">full page: models + generated docs →</a></p>'
-            f'{rp.body}</details>')
+            f' · last run {esc(rp.when.replace("T", " "))}</p>{rp.body}</section>')
 
 
 def arms_of(repos: list[Repo]) -> list[str]:
@@ -75,26 +75,26 @@ def cell(rp: Repo, arm: str) -> str:
 
 def per_repo(repos: list[Repo], arms: list[str]) -> str:
     head = "".join(f"<th>{esc(lab(a))}</th>" for a in arms)
-    rows = "".join(f'<tr data-i="{i}"><td><a class="lnk" href="#repo-{esc(rp.info.key)}">{esc(rp.info.name)}</a>'
-                   f'<div class="muted">{esc(facts(rp.info))}</div></td>{"".join(cell(rp, a) for a in arms)}</tr>'
+    rows = "".join(f'<tr data-i="{i}"><td><strong>{esc(rp.info.name)}</strong>'
+                   f'<div class="muted">{esc(facts(rp.info))}</div></td>{"".join(cell(rp, a) for a in arms)}'
+                   f'<td><button type="button" class="more" data-only="{i}">View more →</button></td></tr>'
                    for i, rp in enumerate(repos))
     return ('<h3>Per repo</h3><p class="muted">Input tokens vs no docs · quality 0–3. No docs shows its own token count.</p>'
-            f'<div class="tw"><table><thead><tr><th>Repo</th>{head}</tr></thead><tbody>{rows}</tbody></table></div>')
+            f'<div class="tw"><table class="fit"><thead><tr><th>Repo</th>{head}<th></th></tr></thead><tbody>{rows}</tbody></table></div>')
 
 
 def combined_shell() -> str:
-    return ('<h2 id="combined-title">Combined</h2><p class="muted">Tokens and cost summed over the picked repos and compared'
-            ' with no docs on the same repos; quality = average of the repos; good = answers scored 2 or 3.</p>'
-            '<div class="tw"><table><thead><tr><th>Setup</th><th>Repos</th><th>Input tokens vs no docs</th>'
-            '<th>Cost vs no docs</th><th>Quality 0–3</th><th>Good answers</th><th>Tokens per good answer</th>'
-            '<th>Fewer tokens than no docs</th></tr></thead><tbody id="combined"></tbody></table></div>')
+    return ('<h2 id="combined-title">Combined</h2><p class="muted">Tokens and cost summed over the picked repos, vs no docs'
+            ' on the same repos. Quality = average. Good = scored 2–3. Wins = repos where it used fewer tokens than no docs.</p>'
+            '<div class="tw"><table class="fit"><thead><tr><th>Setup</th><th>Tokens</th><th>Cost</th><th>Quality</th><th>Good</th>'
+            '<th>Tokens / good</th><th>Wins</th></tr></thead><tbody id="combined"></tbody></table></div>')
 
 
 SCRIPT = """<script>
 // Repo buttons: pick one or several. Choice kept in the URL (#repos=0,2) and this browser.
 (() => {
   const chips = [...document.querySelectorAll(".chip[data-i]")], all = document.getElementById("all");
-  const secs = [...document.querySelectorAll("details.repo")], K = "bl-repos";
+  const secs = [...document.querySelectorAll("section.repo")], over = document.getElementById("overview"), K = "bl-repos";
   const data = JSON.parse(document.getElementById("data").textContent);
   const rows = [...document.querySelectorAll("tr[data-i]")];
   const pct = (a, b) => (a && b) ? ((a / b - 1) * 100).toFixed(0).replace(/^(?!-)/, "+") + "%" : "–";
@@ -114,7 +114,7 @@ SCRIPT = """<script>
       const usd = a === "none" ? "$" + sum(have, a, "usd").toFixed(2) : pct(sum(both, a, "usd"), sum(both, "none", "usd"));
       const q = qs.length ? (qs.reduce((x, y) => x + y, 0) / qs.length).toFixed(2) : "–";
       const pg = good ? Math.round(tok / good / 1000).toLocaleString() + "k" : "–";
-      return `<tr><td><strong>${data.labels[a] || a}</strong></td><td class="n">${have.length}</td><td class="n">${vs}</td>` +
+      return `<tr><td><strong>${data.labels[a] || a}</strong></td><td class="n">${vs}</td>` +
         `<td class="n">${usd}</td><td class="n">${q}</td><td class="n">${good}/${scored}</td><td class="n">${pg}</td>` +
         `<td class="n">${a === "none" ? "–" : wins + "/" + both.length}</td></tr>`;
     }).join("");
@@ -123,7 +123,9 @@ SCRIPT = """<script>
     combine(on);
     rows.forEach(r => r.hidden = !on.has(r.dataset.i));
     chips.forEach(c => c.setAttribute("aria-pressed", on.has(c.dataset.i)));
-    secs.forEach(s => s.hidden = !on.has(s.dataset.i));
+    const one = on.size === 1;               // one repo = its full view; two or more = the summary
+    over.hidden = one;
+    secs.forEach(s => s.hidden = !(one && on.has(s.dataset.i)));
     all.setAttribute("aria-pressed", on.size === chips.length);
     const v = [...on].join(","); history.replaceState(null, "", "#repos=" + v);
     try { localStorage.setItem(K, v); } catch (e) {}
@@ -137,6 +139,9 @@ SCRIPT = """<script>
   chips.forEach(c => c.addEventListener("click", () => {
     const on = cur(); on.has(c.dataset.i) ? on.delete(c.dataset.i) : on.add(c.dataset.i);
     show(on.size ? on : new Set([c.dataset.i]));   // never zero repos picked
+  }));
+  document.querySelectorAll(".more").forEach(b => b.addEventListener("click", () => {
+    show(new Set([b.dataset.only])); scrollTo(0, 0);
   }));
   all.addEventListener("click", () => show(new Set(chips.map(c => c.dataset.i))));
 })();
@@ -155,8 +160,8 @@ def page(repos: list[Repo], built: str) -> str:
         arms = arms_of(repos)
         data = {"arms": arms, "labels": {a: lab(a) for a in arms}, "repos": [{"name": rp.info.name, "stats": rp.stats} for rp in repos]}
         body = (f'<section id="overview">{combined_shell()}{per_repo(repos, arms)}</section>'
-                '<section><h2>Details per repo</h2>' + "".join(section(i, rp) for i, rp in enumerate(repos)) + '</section>'
-                '<script type="application/json" id="data">' + json.dumps(data).replace("</", "<\\/") + "</script>")
+                + "".join(section(i, rp) for i, rp in enumerate(repos))
+                + '<script type="application/json" id="data">' + json.dumps(data).replace("</", "<\\/") + "</script>")
     head = HEAD.replace("{title}", "Brieflet benchmark · all repos").replace("{{", "{").replace("}}", "}")
     live = LIVE.replace("{{", "{").replace("}}", "}")
     n = len(repos)
