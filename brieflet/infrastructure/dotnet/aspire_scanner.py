@@ -50,7 +50,8 @@ class AspireScanner:
         order = list(reader.nodes)
         links = sorted(reader.links.values(), key=lambda l: (order.index(l.source), order.index(l.target)))
         return ComponentGraph(apphost, list(reader.nodes.values())[:MAX_BOXES], links,
-                              {k: v for k, v in refs.items() if v is not None})
+                              {k: v for k, v in refs.items() if v is not None},
+                              f"`{apphost}`, the project files and the HTTP/gRPC client registrations")
 
     @staticmethod
     def _read_project(snapshot, c: Component, reader: AppHostReader) -> list[str] | None:

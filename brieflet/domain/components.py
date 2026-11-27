@@ -1,4 +1,4 @@
-"""Component graph: the boxes (AppHost resources) and arrows of a system. Pure data, no IO."""
+"""Component graph: the boxes (deployable parts, libraries, infrastructure) and arrows of a system. Pure data, no IO."""
 from __future__ import annotations
 
 import json
@@ -12,12 +12,13 @@ MAX_BOXES = 15
 class Component:
     id: str
     name: str
-    kind: str                      # service | cache | queue | database | proxy | container | auth
+    kind: str                      # service | library | module | group | cache | queue | database | proxy | container | auth
     shape: str                     # box | db | queue | hex (diagram shape)
     path: str | None = None        # repo folder of a project; None for infrastructure
     tech: str | None = None        # e.g. "Redis" for infrastructure
     packages: list[str] = field(default_factory=list)
     databases: dict[str, str] = field(default_factory=dict)  # code variable → database name
+    entry: str | None = None       # entry point file (main.py, src/main.rs, …) when one is known
 
     @property
     def is_storage(self) -> bool:
@@ -34,10 +35,12 @@ class Link:
 
 @dataclass
 class ComponentGraph:
-    apphost: str | None
+    apphost: str | None            # .NET Aspire AppHost folder; None for other repos
     components: list[Component] = field(default_factory=list)
     links: list[Link] = field(default_factory=list)
     project_refs: dict[str, list[str]] = field(default_factory=dict)  # component id → referenced projects
+    origin: str = ""               # what the graph was read from, for the docs ("`src/AppHost`, the project files …")
+    notes: list[str] = field(default_factory=list)   # what the scanner skipped or cut, shown in the init output
 
     @property
     def is_empty(self) -> bool:

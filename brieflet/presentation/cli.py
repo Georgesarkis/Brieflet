@@ -46,6 +46,8 @@ def main(argv=None) -> int:
         return 2
     print(f"{len(plan.graph.components)} components, {len(plan.candidates)} decision candidates, {len(plan.calls)} model calls "
           f"({a.llm}: small={model.small}, write={model.write}).")
+    for n in plan.graph.notes:
+        print(f"note: {n}")
     if not model.paid:
         print("Cost: $0 (local model).")
     else:

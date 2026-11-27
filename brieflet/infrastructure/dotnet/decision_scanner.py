@@ -39,6 +39,8 @@ class DotnetDecisionScanner:
     @staticmethod
     def _evidence(snapshot, graph: ComponentGraph, code: list[str], s: DecisionSignal) -> list[str]:
         if s.pattern is None:
+            if not graph.apphost:
+                return []
             return [f"{graph.apphost}/{x}" for x in ("AppHost.cs", "Program.cs") if snapshot.has(f"{graph.apphost}/{x}")]
         rx = re.compile(s.pattern)
         return [f for f in code if rx.search(snapshot.read(f) or "")][:6]

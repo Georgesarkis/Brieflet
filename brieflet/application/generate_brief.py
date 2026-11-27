@@ -17,7 +17,7 @@ from .ports import SMALL, WRITE, ComponentScanner, DecisionScanner, Folder, Lang
 
 
 class NoComponentsFound(Exception):
-    """The repo has no component model this version can read (today: no .NET Aspire AppHost)."""
+    """The repo has nothing Brieflet can draw: no AppHost, no package manifests, no compose file, no code folders."""
 
 
 @dataclass
@@ -49,7 +49,7 @@ class GenerateBrief:
         """What would run, without calling a model."""
         graph = self.components.scan(self.snapshot)
         if graph.is_empty:
-            raise NoComponentsFound("No .NET Aspire AppHost found: Brieflet's component parser supports Aspire repos only (for now).")
+            raise NoComponentsFound("No components found: no .NET Aspire AppHost, package manifests, compose file or code folders.")
         cands = self.decisions.scan(self.snapshot, graph)[:MAX_RECORDS]
         calls = [(SMALL, len(P.label_prompt(graph)) + len(P.LABEL_SYSTEM), P.MAX_OUT["labels"]),
                  (WRITE, len(P.context_prompt(graph, {}, self.snapshot.files)) + len(P.CONTEXT_SYSTEM), P.MAX_OUT["context"])]
@@ -67,7 +67,7 @@ class GenerateBrief:
         records = self._decision_records(plan.candidates)
         facts = self._learned_facts()
         write_claude = not self.writes_into_repo or not self.repo.exists("CLAUDE.md")
-        return Brief(graph, labels, context, records, facts, write_claude, self.notes)
+        return Brief(graph, labels, context, records, facts, write_claude, [*graph.notes, *self.notes])
 
     # ---------------------------------------------------------------- steps
     def _ask(self, role: str, system: str, prompt: str, max_out: int) -> dict | None:
