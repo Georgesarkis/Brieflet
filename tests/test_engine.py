@@ -3,8 +3,10 @@ import json
 import subprocess
 from pathlib import Path
 
-from brieflet.engine import AI_CONTEXT, COMPONENTS, DECISIONS, Init
-from brieflet.llm import LLM
+from brieflet.bootstrap import brief_controller
+from brieflet.presentation.views.ai_context_md import FILE as AI_CONTEXT
+from brieflet.presentation.views.components_md import FILE as COMPONENTS
+from brieflet.presentation.views.decisions_md import INDEX as DECISIONS
 
 APPHOST = '''var builder = DistributedApplication.CreateBuilder(args);
 var redis = builder.AddRedis("redis");
@@ -15,7 +17,16 @@ builder.Build().Run();
 '''
 
 
-class FakeLLM(LLM):
+class FakeLLM:
+    """LanguageModel port, offline."""
+    small, write, paid = "fake-small", "fake-write", False
+
+    def __init__(self):
+        self.calls = []
+
+    def estimate_usd(self, planned):
+        return 0.0
+
     def ask_json(self, role, system, prompt, max_out):
         self.calls.append({"role": role})
         if "name boxes" in system:
@@ -45,13 +56,13 @@ def repo(tmp: Path) -> Path:
 def test_init_writes_files(tmp_path):
     r = repo(tmp_path)
     out = tmp_path / "out"
-    job = Init(r, FakeLLM("ollama"), out, log=lambda *a: None)
+    job = brief_controller(r, FakeLLM(), out, log=lambda *a: None)
     plan = job.plan()
-    assert {n["name"] for n in plan["comp"]["nodes"]} == {"redis", "eventbus", "basket-api", "webapp"}
+    assert {c.name for c in plan.graph.components} == {"redis", "eventbus", "basket-api", "webapp"}
     res = job.run(plan)
     ctx = (out / AI_CONTEXT).read_text()
     assert "Online store UI" in ctx and "`src/Basket.API`" in ctx and "src/Nope" not in ctx
-    assert any("ghost" in n for n in res["notes"])
+    assert any("ghost" in n for n in res.notes)
     assert "gRPC" in (out / COMPONENTS).read_text()
     assert (out / DECISIONS).exists() and (out / "CLAUDE.md").exists()
     assert not (r / AI_CONTEXT).exists()  # --out never touches the repo
@@ -69,26 +80,26 @@ def test_learned_kept_and_pruned(tmp_path):
     (r / "LEARNED.md").write_text("# Learned\n\n- Basket uses Redis → `src/Basket.API/Program.cs` · 2026-11-20\n"
                                   "- Old thing → `src/Removed/Old.cs`\n")
     out = tmp_path / "out"
-    res = Init(r, FakeLLM("ollama"), out, log=lambda *a: None).run(Init(r, FakeLLM("ollama"), out).plan())
+    res = brief_controller(r, FakeLLM(), out, log=lambda *a: None).run(brief_controller(r, FakeLLM(), out).plan())
     txt = (out / "LEARNED.md").read_text()
     assert "Basket uses Redis" in txt and "Old thing" not in txt
-    assert any("src/Removed/Old.cs" in n for n in res["notes"])
+    assert any("src/Removed/Old.cs" in n for n in res.notes)
     claude = (out / "CLAUDE.md").read_text()
     assert "LEARNED.md" in claude and "had to search the code" in claude
 
 
 def test_footer_on_by_default_and_can_be_turned_off(tmp_path, monkeypatch):
-    from brieflet.engine import FOOTER
+    from brieflet.presentation.views.footer import FOOTER
     r = repo(tmp_path)
     out = tmp_path / "on"
-    Init(r, FakeLLM("ollama"), out, log=lambda *a: None).run(Init(r, FakeLLM("ollama"), out).plan())
+    brief_controller(r, FakeLLM(), out, log=lambda *a: None).run(brief_controller(r, FakeLLM(), out).plan())
     for f in (AI_CONTEXT, COMPONENTS, DECISIONS):
         assert (out / f).read_text().rstrip().endswith(FOOTER)
     assert FOOTER not in (out / "CLAUDE.md").read_text() and FOOTER not in (out / "LEARNED.md").read_text()
     off = tmp_path / "off"
-    Init(r, FakeLLM("ollama"), off, log=lambda *a: None, footer=False).run(Init(r, FakeLLM("ollama"), off).plan())
+    brief_controller(r, FakeLLM(), off, log=lambda *a: None, footer=False).run(brief_controller(r, FakeLLM(), off).plan())
     assert FOOTER not in (off / AI_CONTEXT).read_text()
     monkeypatch.setenv("BRIEFLET_FOOTER", "0")
     env = tmp_path / "env"
-    Init(r, FakeLLM("ollama"), env, log=lambda *a: None).run(Init(r, FakeLLM("ollama"), env).plan())
+    brief_controller(r, FakeLLM(), env, log=lambda *a: None).run(brief_controller(r, FakeLLM(), env).plan())
     assert FOOTER not in (env / COMPONENTS).read_text()

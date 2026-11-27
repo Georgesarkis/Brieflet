@@ -49,6 +49,11 @@ fold 2 with only fold 1's facts, and the other way round, so it never sees facts
 
 Spec and fairness rules: [`bench/SPEC.md`](bench/SPEC.md).
 
+## Code layout
+
+Clean Architecture: `domain` → `application` → `infrastructure` / `presentation`, the same in the engine and the
+benchmark, checked by a test. Map for C# developers and where new code goes: [ARCHITECTURE.md](ARCHITECTURE.md).
+
 ## Used by
 
 Using Brieflet in your team or company? Add yourself: open a pull request that adds a line here, or an issue with

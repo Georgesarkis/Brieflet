@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from . import project_instructions
+from .harness import project_instructions
 
 
 def run(question: str, workdir: Path, model: dict, price: dict | None, max_usd_this_run: float) -> dict:
