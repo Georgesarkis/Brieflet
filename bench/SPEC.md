@@ -28,6 +28,7 @@ Limits we fix in this benchmark:
 | ours-local | AI_CONTEXT + diagram + ADRs written by local models (9B/27B on the RTX 2070), no graph | the product, local |
 | ours-cloud | same generator, cloud model writes the text (Haiku 5.5) | the product, cloud option |
 | ours+graph | ours-local + Graphify files | = the 22 Nov "full" bar, to compare with the old numbers |
+| codegraph | CodeGraph exactly as `codegraph install` sets it up: MCP server, prompt hook, its CLAUDE.md text; index built per run | closest local rival (published -47% tokens) |
 
 ## Repos (pinned commits, all public)
 
@@ -81,6 +82,17 @@ Docs generation for ours-local and graphify-full: geolinux (GPU). Claude answeri
 1. New public repo for the product + benchmark (name?).
 2. OK to spend ~$40–120 API price, or start Sonnet-only?
 3. Who checks reference answers (George, a sample of ~10)?
+
+## Tool arms (`prepare`, `cleanup`, `.mcp.json`)
+
+Some rivals are tools, not files. An arm can bring one:
+- `overlay` copies the tool's own setup files as its installer writes them (for CodeGraph: `.mcp.json`,
+  `.claude/settings.json` with its prompt hook, `.claude/CLAUDE.md`). Nothing rewritten, so the tool runs as shipped.
+- `prepare`: shell commands run once in the arm's fresh copy, before any timed run (e.g. `codegraph init --yes .`).
+  Indexing time is not in the answer time; it is a one-off like generating docs.
+- `cleanup`: shell commands run when the bench ends (`{dir}` = the copy), e.g. stop the tool's daemon.
+- The `claude_code` runner loads only the MCP servers in the arm's `.mcp.json` (`--strict-mcp-config`) and allows
+  their tools. Other arms get no MCP servers. Hook output counts as input tokens, like any context.
 
 ## Learning arm (`learn: true`)
 

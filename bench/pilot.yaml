@@ -26,6 +26,10 @@ arms:
     overlay: ["{artifacts}/{repo}/brieflet"]
   brieflet-graph:          # everything the engine wrote (= the slide's blue bar)
     overlay: ["{artifacts}/{repo}/brieflet-graph"]
+  codegraph:               # CodeGraph as `codegraph install` ships it: MCP server + prompt hook + its CLAUDE.md text
+    overlay: ["{artifacts}/{repo}/codegraph"]          # its .mcp.json, .claude/settings.json, .claude/CLAUDE.md (v1.6.4)
+    prepare: ["CODEGRAPH_TELEMETRY=0 codegraph init --yes ."]   # builds .codegraph/ index once, not timed
+    cleanup: ["pkill -f 'codegraph.*serve.*{dir}' || true"]   # its MCP daemon outlives claude
   brieflet-learn:          # Brieflet + LEARNED.md: learns on q1-5, measured on q6-10 (and back). `bench learn` first
     overlay: ["{artifacts}/{repo}/brieflet"]
     learn: true
@@ -49,4 +53,5 @@ prior_tokens:
   brieflet: {input: 26000, output: 2000}
   brieflet-graph: {input: 26000, output: 2000}
   brieflet-learn: {input: 26000, output: 2000}
+  codegraph: {input: 30000, output: 2000}
   default: {input: 80000, output: 2000}
