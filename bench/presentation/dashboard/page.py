@@ -52,7 +52,7 @@ pre.mermaid{{background:#fff;color:#0B1B33}}
 .chip[aria-pressed=true]{{border-color:var(--acc);color:var(--ink);box-shadow:inset 0 0 0 1px var(--acc)}}
 .chip:focus-visible{{outline:2px solid var(--acc);outline-offset:2px}}.chip b{{font-weight:600;overflow-wrap:anywhere}}
 .chip .src{{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--ink3)}}.chip .facts{{font-size:12px;color:var(--ink3)}}
-table.fit{{font-size:13px;min-width:0}}.tw table.fit{{min-width:0}}table.fit th,table.fit td{{padding:6px 6px;white-space:normal}}
+table.fit{{font-size:13px;min-width:0}}.tw table.fit{{min-width:0}}table.fit th:not(:first-child){{text-align:right}}table.fit th,table.fit td{{padding:6px 6px;white-space:normal}}
 .more{{font:inherit;font-size:13px;color:var(--acc);background:none;border:1px solid var(--line);border-radius:999px;padding:4px 10px;cursor:pointer;white-space:nowrap;min-height:32px}}
 .more:hover,.more:focus-visible{{border-color:var(--acc)}}
 .rhead{{display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:baseline}}
