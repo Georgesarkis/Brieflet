@@ -164,6 +164,31 @@ def test_big_monorepo_is_cut_to_max_boxes(tmp_path):
         assert l.source != l.target
 
 
+
+def test_big_monorepo_keeps_big_undeclared_package_and_drops_noise(tmp_path):
+    """cal.com shape: the biggest package is imported by path (few declared users), compose adds a whole-repo
+    service and dev-tool containers, and a tiny package looks like a service."""
+    files = {"package.json": json.dumps({"name": "big", "workspaces": ["apps/*", "packages/*"]}),
+             "Dockerfile": "FROM node\n",
+             "docker-compose.yml": "services:\n  db:\n    image: postgres\n  app:\n    build: .\n    depends_on: [db]\n"
+                                   "  mail:\n    image: mailhog/mailhog\n  studio:\n    image: some/studio\n"}
+    for i in range(40):
+        files[f"packages/p{i:02d}/package.json"] = json.dumps({"name": f"@big/p{i:02d}", "dependencies": {"@big/lib": "*"}})
+    files["packages/lib/package.json"] = json.dumps({"name": "@big/lib"})
+    files["packages/features/package.json"] = json.dumps({"name": "@big/features"})
+    for i in range(300):
+        files[f"packages/features/f{i}.ts"] = "export const x = 1;\n"
+    files["packages/tiny/package.json"] = json.dumps({"name": "@big/tiny", "dependencies": {"next": "15"}})
+    files["apps/web/package.json"] = json.dumps({"name": "@big/web", "dependencies": {"next": "15", "@big/lib": "*"}})
+    for i in range(20):
+        files[f"apps/web/page{i}.tsx"] = "export default 1;\n"
+    g, _ = scan(make_repo(tmp_path, files))
+    names = by_name(g)
+    assert len(g.components) <= MAX_BOXES
+    assert {"@big/web", "@big/lib", "@big/features"} <= set(names)
+    assert not {"app", "mail", "studio"} & set(names)       # whole-repo service + unused dev containers dropped
+    assert "@big/tiny" not in names                         # 0 code files: no service bonus
+
 def test_go_rust_dotnet_projects(tmp_path):
     g, dec = scan(make_repo(tmp_path, {
         "svc/go.mod": "module github.com/acme/svc\n\ngo 1.22\n\nrequire (\n\tgithub.com/gin-gonic/gin v1.9.1\n"

@@ -9,14 +9,20 @@ MAX_INFRA = 5
 TOOLING = re.compile(r"(^|[-/@_])(tsconfig|eslint|prettier|config|configs|tooling|types)($|[-_/])", re.I)
 
 
-def collapse(comps: list[Component], links: list[Link], refs: dict[str, list[str]], max_boxes: int):
-    """→ (components, links, project_refs) with at most max_boxes components."""
+def collapse(comps: list[Component], links: list[Link], refs: dict[str, list[str]], max_boxes: int,
+             sizes: dict[str, int] | None = None):
+    """→ (components, links, project_refs) with at most max_boxes components. sizes = code files per component id."""
     used = {c.id: 0 for c in comps}
     for l in links:
         used[l.target] = used.get(l.target, 0) + 1
-    infra = sorted((c for c in comps if c.path is None), key=lambda c: -used[c.id])[:MAX_INFRA]
+    # Dev-tool containers nobody calls (mail catchers, DB browsers) explain nothing about the code.
+    infra = sorted((c for c in comps if c.path is None and (c.kind != "container" or used[c.id])),
+                   key=lambda c: -used[c.id])[:MAX_INFRA]
     projects = [c for c in comps if c.path is not None]
-    ranked = sorted(projects, key=lambda c: (-_score(c, used), c.path or ""))
+    if len(projects) > 1:   # a box for the whole repo (compose service built from the root) only repeats the others
+        projects = [c for c in projects if (c.path or "") not in ("", ".")]
+    sizes = sizes or {}
+    ranked = sorted(projects, key=lambda c: (-_score(c, used, sizes), c.path or ""))
     slots = max_boxes - len(infra)
     singles, groups = _fit(ranked, slots)
     box_of = {c.id: c.id for c in [*infra, *singles]}
@@ -38,11 +44,16 @@ def collapse(comps: list[Component], links: list[Link], refs: dict[str, list[str
     return [*keep, *group_boxes], list(out_links.values()), {k: v for k, v in refs.items() if k in box_of and box_of[k] == k}
 
 
-def _score(c: Component, used: dict[str, int]) -> int:
-    """Things that run first (what a developer asks about), then the libraries most others use. Shared lint/tsconfig
-    packages are used by everyone but explain nothing."""
+def _score(c: Component, used: dict[str, int], sizes: dict[str, int]) -> int:
+    """Things that run first (what a developer asks about), then big and much-used libraries. Size matters because
+    monorepos often import their biggest package by path, not as a declared dependency (cal.com packages/features).
+    A "service" with almost no code (a package with a bin or a next dependency) gets no service bonus. Shared
+    lint/tsconfig packages are used by everyone but explain nothing."""
     tooling = TOOLING.search(c.name) is not None
-    return (25 if c.kind == "service" else 0) + (5 if c.entry else 0) + min(used[c.id], 20) - (30 if tooling else 0)
+    size = sizes.get(c.id, 0)
+    tiny = any(sizes.values()) and size < 10
+    return ((25 if c.kind == "service" and not tiny else 0) + (5 if c.entry else 0) + min(used[c.id], 20)
+            + min(size // 25, 30) - (30 if tooling else 0))
 
 
 def _fit(ranked: list[Component], slots: int):

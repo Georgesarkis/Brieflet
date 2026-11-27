@@ -30,8 +30,9 @@ Writes `AI_CONTEXT.md`, `CLAUDE.md` (pointer), `docs/architecture/components.md`
   Dockerfiles, entry points (`main.py`, `src/main.rs`, `Program.cs`, start scripts) and dependencies between the
   projects. Known images and client libraries (Postgres, Redis, Kafka, RabbitMQ, …) become infrastructure boxes.
   A repo with no manifests gets one box per top code folder.
-- **Big monorepos** (100+ packages): the diagram keeps 15 boxes. Apps and the most used libraries stay, the rest
-  become one group box per folder (`packages/*`). Examples, tests, docs and `node_modules` are left out.
+- **Big monorepos** (100+ packages): the diagram keeps 15 boxes. Apps, the biggest and the most used libraries
+  stay, the rest become one group box per folder (`packages/*`). Dev-tool containers nobody calls and a Compose
+  service built from the whole repo are left out. Examples, tests, docs and `node_modules` are left out.
 
 Decision records come from what the code shows: Compose, Kubernetes, Terraform, CI, monorepo tools, gRPC/GraphQL
 schemas, and dependencies (web framework, database + ORM, message bus, auth, background jobs).
