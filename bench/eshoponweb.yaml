@@ -1,0 +1,48 @@
+# Repo 2 (ROADMAP Day 4): a non-Aspire .NET monolith. Free: Claude Code on your own Claude login ($0 extra).
+# 3 setups × 10 questions × 1 repeat = 30 runs (fits one night, < 40). Own results folder → own dashboard:
+#   http://geolinux:8097/eshoponweb/dashboard.html
+# Repo (archived upstream, so HEAD is final):
+#   git clone https://github.com/dotnet-architecture/eShopOnWeb ~/bench/repos/eShopOnWeb-4da8212
+#   git -C ~/bench/repos/eShopOnWeb-4da8212 checkout 4da8212117e87d808d4bbc7da6286fd2147ce606
+# Brieflet docs (local Ollama, $0), written once before the run:
+#   python -m brieflet init ~/bench/repos/eShopOnWeb-4da8212 --out bench/artifacts/eshoponweb-4da8212/brieflet
+# Rival = CodeGraph (Day 2: 188k tokens per good answer on eShop; a tool, so nothing to pre-generate).
+repeats: 1
+max_usd: 0                 # nothing paid in this config
+max_usd_per_run: 1.00
+results: results/eshoponweb
+notify_cmd: notify         # geolinux ntfy push when done (skipped if the command doesn't exist)
+
+repos:
+  eshoponweb-4da8212:
+    path: ~/bench/repos/eShopOnWeb-4da8212
+    sha: 4da8212117e87d808d4bbc7da6286fd2147ce606
+    questions: questions/eshoponweb.yaml
+    strip: [CLAUDE.md, AGENTS.md, AI_CONTEXT.md, DECISIONS.md, docs/architecture, docs/decisions]
+
+artifacts: artifacts
+arms:
+  none: {}
+  brieflet:                # AI_CONTEXT + diagram + decisions from `brieflet init`, no graph
+    overlay: ["{artifacts}/{repo}/brieflet"]
+  codegraph:               # CodeGraph as `codegraph install` ships it: MCP server + prompt hook + its CLAUDE.md text
+    overlay: ["{artifacts}/{repo}/codegraph"]          # its .mcp.json, .claude/settings.json, .claude/CLAUDE.md (v1.6.4)
+    prepare: ["CODEGRAPH_TELEMETRY=0 codegraph init --yes ."]   # builds .codegraph/ index once, not timed
+    cleanup: ["pkill -f 'codegraph.*serve.*{dir}' || true"]   # its MCP daemon outlives claude
+
+judge:                     # quality scores: Claude Code (Opus) on your login, $0 extra (needs Brieflet Pro)
+  runner: claude_code
+  model: opus
+  billing: subscription
+
+models:
+  - name: sonnet-sub
+    runner: claude_code
+    model: sonnet
+    billing: subscription
+
+prior_tokens:              # eShop numbers as a first guess; eShopOnWeb is smaller
+  none: {input: 53000, output: 2000}
+  brieflet: {input: 26000, output: 2000}
+  codegraph: {input: 30000, output: 2000}
+  default: {input: 80000, output: 2000}

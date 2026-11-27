@@ -1,0 +1,19 @@
+# Who wrote these docs. Shown on the dashboard.
+repo: dotnet-architecture/eShopOnWeb
+sha: 4da8212117e87d808d4bbc7da6286fd2147ce606
+generated: 2026-11-27
+source: "`python -m brieflet init` (any-language engine, Brieflet PR 5) on geolinux, `--out bench/artifacts/eshoponweb-4da8212/brieflet`"
+hardware: RTX 2070 8 GB (geolinux home server)
+writers:
+  - role: diagram box labels, decision classification
+    model: qwen3.5:9b
+    runtime: Ollama (local)
+  - role: AI_CONTEXT.md prose, decision records
+    model: Bonsai 27B (hf.co/prism-ml/Bonsai-27B-gguf:Q1_0)
+    runtime: Ollama (local)
+  - role: code index (codegraph arm)
+    model: none (CodeGraph 1.6.4, tree-sitter + SQLite, built by `prepare` in each bench run)
+    runtime: local CLI
+arms:
+  brieflet: AI_CONTEXT.md, CLAUDE.md, components diagram, decision records, DECISIONS.md (no graph)
+  codegraph: CodeGraph's own install files (.mcp.json, .claude/settings.json with its prompt hook, .claude/CLAUDE.md), index built at run time

@@ -64,6 +64,10 @@ Built-in runner: `fake` (offline, checks the pipeline). Reader models and the qu
 Learning is measured fairly: questions are split in folds (default 2). The arm learns on fold 1 and is measured on
 fold 2 with only fold 1's facts, and the other way round, so it never sees facts from the question it is scored on.
 
+Shipped question sets (10 questions each, written before any run, reference points for the judge in `*.refs.yaml`):
+`bench/pilot.yaml` = dotnet/eShop (Aspire microservices), `bench/eshoponweb.yaml` = eShopOnWeb (.NET monolith;
+none vs Brieflet vs CodeGraph, 30 runs).
+
 Spec and fairness rules: [`bench/SPEC.md`](bench/SPEC.md).
 
 ## Code layout
