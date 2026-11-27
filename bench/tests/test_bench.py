@@ -6,8 +6,17 @@ from pathlib import Path
 import pytest
 import yaml
 
-from bench import __main__ as b
-from bench.tools import RepoTools
+from bench.application.plan_benchmark import PlanBenchmark
+from bench.infrastructure.config_loader import load
+from bench.infrastructure.results_store import JsonlResults
+from bench.infrastructure.runners import fake
+from bench.infrastructure.runners.repo_tools import RepoTools
+from bench.infrastructure.workspaces import ArmWorkspaces
+from bench.presentation.cli import main
+
+
+def must_not_run(name):
+    pytest.fail("must not call a paid runner")
 
 
 @pytest.fixture
@@ -32,19 +41,20 @@ def setup(tmp_path):
 
 def test_fake_run_and_report(setup, capsys):
     p, tmp = setup
-    assert b.main(["run", "-c", str(p)]) == 0
+    assert main(["run", "-c", str(p)]) == 0
     rows = [json.loads(l) for l in open(tmp / "res" / "runs.jsonl")]
     assert len(rows) == 4 and {r["arm"] for r in rows} == {"none", "brieflet"}
-    assert b.main(["report", "-c", str(p)]) == 0
+    assert main(["report", "-c", str(p)]) == 0
     assert "| demo | fake | brieflet |" in capsys.readouterr().out
 
 
 def test_arms_strip_and_overlay(setup, tmp_path):
     p, _ = setup
-    cfg = b.load(str(p))
-    none = b.prepare(cfg, "demo", "none", tmp_path / "w1")
+    cfg = load(p)
+    ws = ArmWorkspaces(cfg, JsonlResults(cfg.results_dir), tmp_path / "w")
+    none = ws.arm("demo", "none")
     assert not (none / "CLAUDE.md").exists() and (none / "src" / "Basket.cs").exists()
-    br = b.prepare(cfg, "demo", "brieflet", tmp_path / "w2")
+    br = ws.arm("demo", "brieflet")
     assert (br / "CLAUDE.md").read_text().startswith("Read AI_CONTEXT")
 
 
@@ -55,36 +65,33 @@ def _paid(p, **extra):
     p.write_text(yaml.safe_dump(cfg))
 
 
-def test_paid_needs_yes(setup, monkeypatch):
+def test_paid_needs_yes(setup):
     p, _ = setup
     _paid(p, max_usd=100)
-    monkeypatch.setattr(b.runners, "get", lambda r: pytest.fail("must not call a paid runner"))
-    assert b.main(["run", "-c", str(p)]) == 2
+    assert main(["run", "-c", str(p)], runner_for=must_not_run) == 2
 
 
-def test_paid_over_budget_refused(setup, monkeypatch):
+def test_paid_over_budget_refused(setup):
     p, _ = setup
     _paid(p, max_usd=0.01)
-    monkeypatch.setattr(b.runners, "get", lambda r: pytest.fail("must not call a paid runner"))
-    assert b.main(["run", "-c", str(p), "--yes"]) == 2
+    assert main(["run", "-c", str(p), "--yes"], runner_for=must_not_run) == 2
 
 
-def test_unpriced_openai_refused(setup, monkeypatch):
+def test_unpriced_openai_refused(setup):
     p, _ = setup
     cfg = yaml.safe_load(open(p))
     cfg["models"] = [{"name": "gpt", "runner": "openai", "model": "gpt-placeholder"}]
     cfg["max_usd"] = 1000
     p.write_text(yaml.safe_dump(cfg))
-    monkeypatch.setattr(b.runners, "get", lambda r: pytest.fail("must not call"))
-    assert b.main(["run", "-c", str(p), "--yes"]) == 2
+    assert main(["run", "-c", str(p), "--yes"], runner_for=must_not_run) == 2
 
 
 def test_subscription_is_free(setup):
     p, _ = setup
-    cfg = b.load(str(p))
-    cfg["models"] = [{"name": "sub", "runner": "claude_code", "model": "sonnet"}]
-    t = b.plan(cfg, quiet=True)
-    assert t["paid_runs"] == 0 and t["sub_runs"] == 4
+    cfg = load(p)
+    cfg.data["models"] = [{"name": "sub", "runner": "claude_code", "model": "sonnet"}]
+    t = PlanBenchmark(cfg, JsonlResults(cfg.results_dir)).execute().totals
+    assert t.paid_runs == 0 and t.sub_runs == 4
 
 
 def test_tools_sandbox(tmp_path):
@@ -98,7 +105,7 @@ def test_tools_sandbox(tmp_path):
 
 def test_anthropic_loop_with_mock(tmp_path, monkeypatch):
     """Tool call → tool result → answer; usage summed over turns; no network."""
-    from bench.runners import anthropic_api
+    from bench.infrastructure.runners import anthropic_api
     (tmp_path / "x.cs").write_text("class X {}\n")
     U = lambda i, o: types.SimpleNamespace(input_tokens=i, output_tokens=o, cache_read_input_tokens=100, cache_creation_input_tokens=10)
     replies = [
@@ -118,25 +125,25 @@ def test_anthropic_loop_with_mock(tmp_path, monkeypatch):
     assert abs(r["cost_usd"] - (110 * 2 + 50 * 10 + 200 * 0.1 + 20 * 2.5) / 1e6) < 1e-12
 
 
-def test_judge_free_and_report(setup, monkeypatch, capsys):
+def test_judge_free_and_report(setup, capsys):
     p, tmp = setup
     (tmp / "q.refs.yaml").write_text(yaml.safe_dump({"q1": {"must": ["basket in Basket.cs", "uses gRPC"]}}))
-    assert b.main(["run", "-c", str(p)]) == 0
+    assert main(["run", "-c", str(p)]) == 0
     calls = []
-    def fake_ask(jc, text):
-        calls.append(text)
-        return json.dumps({"must": [True, len(calls) % 2 == 0], "wrong_claims": []}), {"cost_usd": 0}
-    monkeypatch.setattr(b.J, "ask", fake_ask)
-    assert b.main(["judge", "-c", str(p)]) == 0 and len(calls) == 4
-    assert b.main(["judge", "-c", str(p)]) == 0 and len(calls) == 4  # already judged: nothing new
+    class FakeJudge:
+        def ask(self, jc, text):
+            calls.append(text)
+            return json.dumps({"must": [True, len(calls) % 2 == 0], "wrong_claims": []}), {"cost_usd": 0}
+    assert main(["judge", "-c", str(p)], judge=FakeJudge()) == 0 and len(calls) == 4
+    assert main(["judge", "-c", str(p)], judge=FakeJudge()) == 0 and len(calls) == 4  # already judged: nothing new
     capsys.readouterr()
-    b.main(["report", "-c", str(p)])
+    main(["report", "-c", str(p)])
     out = capsys.readouterr().out
     assert "3.00 (n=2)" in out and "1.00 (n=2)" in out and "| 5,000 |" in out
 
 
 def test_judge_score_rule():
-    from bench.judge import score
+    from bench.domain.scoring import score
     assert score(2, {"must": [True, True], "wrong_claims": []}) == 3
     assert score(3, {"must": [True, True, False], "wrong_claims": []}) == 2
     assert score(3, {"must": [True, False, False], "wrong_claims": []}) == 1
@@ -144,10 +151,9 @@ def test_judge_score_rule():
     assert score(2, {"must": [True, True], "wrong_claims": [{"severity": "minor"}]}) == 2
 
 
-def test_stop_on_errors_then_resume(setup, monkeypatch):
+def test_stop_on_errors_then_resume(setup):
     p, tmp = setup
     cfg = yaml.safe_load(open(p)); cfg["repeats"] = 3; p.write_text(yaml.safe_dump(cfg))
-    from bench.runners import fake
     real = fake.run
     state = {"n": 0}
     def flaky(*a, **k):
@@ -156,16 +162,14 @@ def test_stop_on_errors_then_resume(setup, monkeypatch):
         if state["n"] > 2:
             r["error"] = "usage limit"
         return r
-    monkeypatch.setattr(b.runners, "get", lambda name: flaky)
-    assert b.main(["run", "-c", str(p)]) == 4          # stops after 3 errors in a row
+    assert main(["run", "-c", str(p)], runner_for=lambda name: flaky) == 4          # stops after 3 errors in a row
     assert state["n"] == 5
-    monkeypatch.setattr(b.runners, "get", lambda name: real)
-    assert b.main(["run", "-c", str(p), "--resume"]) == 0
+    assert main(["run", "-c", str(p), "--resume"], runner_for=lambda name: real) == 0
     ok = [json.loads(l) for l in open(tmp / "res" / "runs.jsonl") if not json.loads(l).get("error")]
     assert len(ok) == 6 and len({(r["arm"], r["rep"]) for r in ok}) == 6
 
 
-def test_learn_folds_never_leak(setup, monkeypatch):
+def test_learn_folds_never_leak(setup):
     """Learn on fold 1, measured on fold 2 with ONLY fold 1's facts (and the other way round)."""
     p, tmp = setup
     cfg = yaml.safe_load(p.read_text())
@@ -175,20 +179,19 @@ def test_learn_folds_never_leak(setup, monkeypatch):
     p.write_text(yaml.safe_dump(cfg))
     seen = {}
 
-    def fake(question, wd, m, price, cap):
+    def fake_run(question, wd, m, price, cap):
         lm = Path(wd, "LEARNED.md")
         seen.setdefault(question.split("\n")[0], []).append(lm.read_text() if lm.exists() else "")
         n = question.split()[1]
         return {"input_tokens": 0, "cache_read": 10, "cache_write": 0, "output_tokens": 1, "turns": 1, "secs": 0.0,
                 "cost_usd": 0.0, "error": None,
                 "answer": f"answer\nLEARNED:\n- fact from q{n} → `src/Basket.cs`\n- bogus q{n} → `nope/gone.cs`"}
-    monkeypatch.setattr(b.runners, "get", lambda r: fake)
-    assert b.main(["run", "-c", str(p)]) == 2            # learn arm without a learning pass: refused
-    assert b.main(["learn", "-c", str(p)]) == 0
+    assert main(["run", "-c", str(p)], runner_for=lambda r: fake_run) == 2   # learn arm without a learning pass: refused
+    assert main(["learn", "-c", str(p)], runner_for=lambda r: fake_run) == 0
     f1 = (tmp / "res" / "learned" / "demo" / "fake" / "learn" / "fold1.md").read_text()
     assert "fact from q1" in f1 and "fact from q2" in f1 and "q3" not in f1 and "bogus" not in f1
     seen.clear()
-    assert b.main(["run", "-c", str(p)]) == 0
+    assert main(["run", "-c", str(p)], runner_for=lambda r: fake_run) == 0
     q3 = next(t for t in seen["question 3"] if t)          # measured run of q3 (fold 2): sees fold 1 facts only
     assert sum(1 for t in seen["question 3"] if t) == 2  # only the learn arm (2 repeats) has LEARNED.md
     assert "fact from q1" in q3 and "fact from q3" not in q3
@@ -197,11 +200,10 @@ def test_learn_folds_never_leak(setup, monkeypatch):
 
 
 def test_learned_md_prune(tmp_path):
-    from brieflet import learned as L
+    """Duplicates, secrets, missing paths and paths outside the repo never reach LEARNED.md."""
+    from brieflet.domain.learned import parse_facts
     (tmp_path / "a.cs").write_text("x")
-    f = tmp_path / "LEARNED.md"
-    L.add(f, tmp_path, [{"fact": "A is here", "path": "a.cs"}, {"fact": "A is here", "path": "a.cs"},
-                        {"fact": "api_key: abc", "path": "a.cs"}, {"fact": "gone", "path": "b.cs"},
-                        {"fact": "escape", "path": "../etc/passwd"}])
-    rows = L.parse_lines(f.read_text())
-    assert [r["fact"] for r in rows] == ["A is here"]
+    ws = ArmWorkspaces(None, None, tmp_path / "w")
+    ws.add_learned(tmp_path, "LEARNED:\n- A is here → `a.cs`\n- A is here → `a.cs`\n- api_key: abc → `a.cs`")
+    ws.add_learned(tmp_path, "LEARNED:\n- gone → `b.cs`\n- escape → `../etc/passwd`")
+    assert [f.fact for f in parse_facts((tmp_path / "LEARNED.md").read_text())] == ["A is here"]

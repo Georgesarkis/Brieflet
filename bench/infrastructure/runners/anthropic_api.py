@@ -10,8 +10,9 @@ from pathlib import Path
 
 import anthropic
 
-from ..tools import SPECS, RepoTools
-from . import SYSTEM, cost, project_instructions
+from ...domain.pricing import usage_cost
+from .repo_tools import SPECS, RepoTools
+from .harness import SYSTEM, empty_usage, project_instructions
 
 
 def run(question: str, workdir: Path, model: dict, price: dict | None, max_usd_this_run: float) -> dict:
@@ -21,7 +22,7 @@ def run(question: str, workdir: Path, model: dict, price: dict | None, max_usd_t
             for s in SPECS]
     system = SYSTEM + project_instructions(workdir)
     messages = [{"role": "user", "content": question}]
-    u = {"input_tokens": 0, "output_tokens": 0, "cache_read": 0, "cache_write": 0}
+    u = empty_usage()
     turns, t0, answer, error = 0, time.time(), "", None
     params = dict(model=model["model"], max_tokens=model.get("max_tokens", 16000), system=system, tools=defs,
                   cache_control={"type": "ephemeral"})
@@ -43,7 +44,7 @@ def run(question: str, workdir: Path, model: dict, price: dict | None, max_usd_t
         u["output_tokens"] += us.output_tokens or 0
         u["cache_read"] += getattr(us, "cache_read_input_tokens", 0) or 0
         u["cache_write"] += getattr(us, "cache_creation_input_tokens", 0) or 0
-        spent = cost(u, price) or 0
+        spent = usage_cost(u, price) or 0
 
         if resp.stop_reason == "refusal":
             error = "refusal"
@@ -69,5 +70,5 @@ def run(question: str, workdir: Path, model: dict, price: dict | None, max_usd_t
                 results.append({"type": "tool_result", "tool_use_id": b.id, "content": text, "is_error": is_err})
         messages.append({"role": "user", "content": results})
 
-    return {**u, "turns": turns, "secs": round(time.time() - t0, 1), "cost_usd": cost(u, price),
+    return {**u, "turns": turns, "secs": round(time.time() - t0, 1), "cost_usd": usage_cost(u, price),
             "answer": answer, "error": error}

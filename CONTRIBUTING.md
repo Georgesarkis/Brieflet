@@ -6,6 +6,7 @@ Issues and pull requests are welcome.
 
 - For a bigger change, open an issue first so we can agree on the approach.
 - Keep pull requests small and focused on one thing.
+- Keep the layers: read [ARCHITECTURE.md](ARCHITECTURE.md) first. `tests/test_architecture.py` fails if an import points the wrong way.
 - The benchmark must stay fair and honest: no claims that `bench report` can't show. See [`bench/SPEC.md`](bench/SPEC.md).
 
 ## Develop
