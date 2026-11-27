@@ -1,5 +1,6 @@
 # Repo 3 (ROADMAP Day 5): a BIG TypeScript monorepo (Yarn + Turbo, ~120 workspace packages, ~490k lines).
-# Free: Claude Code on your own Claude login ($0 extra). 4 setups × 10 questions × 1 repeat = 40 runs (one night).
+# Free: Claude Code on your own Claude login ($0 extra). 5 setups × 10 questions × 1 repeat = 50 runs
+# (one night + `--resume` in the morning if the plan limit hits).
 # Plus the learning pass first: `bench learn` = 10 runs (2 folds × 5 questions), in the day window.
 # Own results folder → http://geolinux:8097/calcom/dashboard.html (and the all-repos page).
 # Repo (pinned main of 13 Nov 2026):
@@ -8,7 +9,7 @@
 # Brieflet docs (local Ollama, $0), written once before the run:
 #   python -m brieflet init ~/bench/repos/calcom-ae027bb --out bench/artifacts/calcom-ae027bb/brieflet
 # cal.com ships its own AI docs (CLAUDE.md = AGENTS.md, agents/, .claude, .cursor, .opencode, specs/): stripped in every
-# arm so "none" really is no docs. Comparing against their own docs = parked idea, not this run.
+# arm so "none" really is no docs. Arm `own-docs` keeps them (George, 27 Nov): Brieflet vs hand-written AI docs.
 # Rival = CodeGraph (as on Day 2 + 4). Questions are paired across the 2 learning folds (see questions/calcom.yaml).
 repeats: 1
 max_usd: 0                 # nothing paid in this config
@@ -27,6 +28,8 @@ repos:
 artifacts: artifacts
 arms:
   none: {}
+  own-docs:                # cal.com's own CLAUDE.md/AGENTS.md/agents/.claude rules as shipped, nothing of ours
+    keep_repo_docs: true
   brieflet:                # AI_CONTEXT + diagram + decisions from `brieflet init`, no graph
     overlay: ["{artifacts}/{repo}/brieflet"]
   codegraph:               # CodeGraph as `codegraph install` ships it: MCP server + prompt hook + its CLAUDE.md text
@@ -55,5 +58,6 @@ prior_tokens:              # guesses for `bench plan`; a big repo means more dig
   none: {input: 150000, output: 3000}
   brieflet: {input: 100000, output: 3000}
   brieflet-learn: {input: 90000, output: 3000}
+  own-docs: {input: 150000, output: 3000}
   codegraph: {input: 150000, output: 3000}
   default: {input: 150000, output: 3000}

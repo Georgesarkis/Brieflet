@@ -67,7 +67,7 @@ fold 2 with only fold 1's facts, and the other way round, so it never sees facts
 Shipped question sets (10 questions each, written before any run, reference points for the judge in `*.refs.yaml`):
 `bench/pilot.yaml` = dotnet/eShop (Aspire microservices), `bench/eshoponweb.yaml` = eShopOnWeb (.NET monolith;
 none vs Brieflet vs CodeGraph, 30 runs), `bench/calcom.yaml` = cal.com (big TypeScript monorepo, ~120 packages;
-none vs Brieflet vs CodeGraph vs Brieflet+learning, 40 runs + 10 learning runs; each question has a same-area twin in
+none vs its own AI docs vs Brieflet vs CodeGraph vs Brieflet+learning, 50 runs + 10 learning runs; each question has a same-area twin in
 the other fold, so it tests "the same team keeps asking about one codebase").
 
 `python -m bench dashboard` (and every run/judge) also rebuilds `results/index.html`: one button per tested repo

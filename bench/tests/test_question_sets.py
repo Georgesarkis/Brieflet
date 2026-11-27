@@ -34,8 +34,9 @@ def test_eshoponweb_is_one_night():
 def test_calcom_is_one_night_with_learning():
     cfg = load(BENCH / "calcom.yaml")
     runs = sum(len(qs) for *_, qs in cfg.matrix(None)) * cfg.repeats
-    assert runs == 40                           # ROADMAP Day 5: 4 setups × 10 q × 1, max 40 per night
-    assert set(cfg.arms) == {"none", "brieflet", "codegraph", "brieflet-learn"}
+    assert runs == 50                           # 5 setups × 10 q × 1 (own-docs added by George): night + --resume
+    assert set(cfg.arms) == {"none", "own-docs", "brieflet", "codegraph", "brieflet-learn"}
+    assert cfg.arm("own-docs").get("keep_repo_docs") and not cfg.arm("none").get("keep_repo_docs")
     assert cfg.is_learn("brieflet-learn") and not cfg.is_learn("brieflet")
     repo = "calcom-ae027bb"
     types = [q["type"] for q in cfg.questions[repo]]

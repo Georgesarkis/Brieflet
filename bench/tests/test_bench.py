@@ -76,6 +76,17 @@ def test_arm_copy_skips_dangling_symlinks_and_strips_folders(setup, tmp_path):
     assert not (none / "pkg" / ".env").exists()
     assert not any((none / x).exists() for x in ["CLAUDE.md", "AGENTS.md", "agents"])
 
+
+def test_own_docs_arm_keeps_repo_docs(setup, tmp_path):
+    p, _ = setup
+    cfg = yaml.safe_load(open(p))
+    cfg["arms"]["own-docs"] = {"keep_repo_docs": True}
+    p.write_text(yaml.safe_dump(cfg))
+    c = load(p)
+    ws = ArmWorkspaces(c, JsonlResults(c.results_dir), tmp_path / "w")
+    assert (ws.arm("demo", "own-docs") / "CLAUDE.md").read_text() == "old docs, must be stripped"
+    assert not (ws.arm("demo", "none") / "CLAUDE.md").exists()
+
 def _paid(p, **extra):
     cfg = yaml.safe_load(open(p))
     cfg["models"] = [{"name": "paid", "runner": "paid-plugin", "model": "big"}]
