@@ -35,6 +35,7 @@ def test_index_lists_every_repo_with_its_facts(tmp_path):
     assert "Open source · MIT" in html and "Closed source" in html
     assert "C# · 1 files · 2 lines" in html and "Python · 2 files · 2 lines" in html
     assert 'href="shop/dashboard.html"' in html and 'href="secret/dashboard.html"' in html
+    assert 'id="combined"' in html and 'tr data-i="1"' in html and '"name": "acme/Secret"' in html
     assert "../index.html" in (tmp_path / "results" / "shop" / "dashboard.html").read_text()
 
 

@@ -98,7 +98,9 @@ def build_index(entries: list, root: Path) -> str:
             ri = repo_info(repo, rc, _meta(c, repo), c.path(path) if path else None)
             page = store.runs_path.with_name("dashboard.html").relative_to(root).as_posix()
             body = R.hero(stats, model, len(qs)) + R.bars(stats) + R.table(stats) + R.per_question(stats, qs, qtext)
-            repos.append(H.Repo(ri, body, page, model, sum(s.runs for s in stats.values()), when))
+            nums = {a: {"tokens": st.tokens, "usd": st.usd, "secs": st.secs, "quality": st.quality, "good": st.good,
+                        "scored": st.n_scored} for a, st in stats.items()}
+            repos.append(H.Repo(ri, body, page, model, sum(s.runs for s in stats.values()), when, nums))
     return H.page(repos, dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
 
 
