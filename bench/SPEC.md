@@ -35,9 +35,10 @@ Limits we fix in this benchmark:
 Start with .NET because that's what the engine reads today:
 1. **dotnet/eShop**: medium, Aspire microservices (the original demo, re-run on upstream).
 2. **dotnet-architecture/eShopOnWeb**: small monolith (checks we don't only help microservices).
-3. **bitwarden/server**: large real product (checks it scales beyond samples).
+3. **calcom/cal.com**: big TypeScript monorepo (~120 packages, ~490k lines), checks it scales beyond samples and
+   beyond .NET. Ships its own CLAUDE.md/AGENTS.md/agents/ docs: stripped in every arm.
 
-After step 2 makes the engine language-agnostic, add one TypeScript and one Python repo.
+Later: bitwarden/server (large .NET) and a Python repo.
 
 ## Questions (10 per repo, written before any run)
 

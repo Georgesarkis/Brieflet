@@ -1,0 +1,96 @@
+# Reference answers for calcom.yaml, checked against calcom/cal.com @ ae027bb (27 Nov 2026) by reading the code.
+# The judge scores an answer by how many `must` points it gets right and whether it states anything wrong.
+# `nice` points are extra credit only. George: spot-check a few before the numbers go public.
+q1:
+  must:
+    - "Yarn workspaces + Turborepo monorepo (root package.json workspaces apps/*, apps/api/*, packages/*, packages/features/*, packages/app-store/*, packages/platform/*; turbo.json)."
+    - "apps/web (@calcom/web): the main Next.js app (App Router in apps/web/app plus pages/ for API routes like /api/book/event), booking pages, settings; talks to its backend mostly through tRPC (packages/trpc, routers in server/routers/viewer)."
+    - "apps/api/v2 (@calcom/api-v2): the public REST API v2 built with NestJS (controllers per version, e.g. platform/bookings/2024-08-13, versioned by the cal-api-version header); apps/api/index.js is only a local proxy (port 3002, /v2 → localhost:3004)."
+    - "Shared domain code lives in packages: packages/features (bookings, availability, slots, event types, webhooks...), packages/lib (utilities), packages/prisma (schema.prisma, PostgreSQL via Prisma, migrations), packages/app-store (integrations), packages/ui (components), packages/emails, packages/embeds, packages/i18n."
+    - "API v2 does not import @calcom/features or @calcom/trpc directly: shared code is re-exported through packages/platform/libraries (@calcom/platform-libraries, built package) and v2 subclasses it (e.g. apps/api/v2/src/lib/services/regular-booking.service.ts extends the RegularBookingService from @calcom/platform-libraries/bookings)."
+  nice:
+    - "packages/platform also has atoms (embeddable React booking components), constants, types, enums, utils."
+    - "apps/docs = docs site; docker-compose.yml runs Postgres, Redis, the web app and the API."
+q2:
+  must:
+    - "Entry: tRPC viewer.slots.getSchedule (packages/trpc/server/routers/viewer/slots/_router.tsx → getSchedule.handler.ts) which calls AvailableSlotsService.getAvailableSlots in packages/trpc/server/routers/viewer/slots/util.ts; API v2 slots controllers use the same service. The web Booker calls it via the useSchedule hook (apps/web/modules/schedules/hooks/useSchedule.ts)."
+    - "Per host, UserAvailabilityService (packages/features/availability/lib/getUserAvailability.ts) builds date ranges from the schedule's working hours and date overrides (Schedule/Availability), minus busy times: existing bookings and connected-calendar busy times (BusyTimesService → getBusyCalendarTimes in CalendarManager), plus out-of-office, holidays, travel schedules and booking/duration limits."
+    - "For team events getAggregatedAvailability combines hosts by scheduling type (collective = intersection, round robin = union)."
+    - "getSlots (packages/features/schedules/lib/slots.ts) cuts the available ranges into slots using the frequency (slotInterval or the event length), minimum booking notice and offsetStart; slots reserved by other bookers (SelectedSlots) and seat counts are taken into account."
+  nice:
+    - "Period limits (rolling window / range / unlimited) cap how far ahead slots go."
+    - "Results are cached briefly in Redis (withSlotsCache)."
+q3:
+  must:
+    - "Each app is a folder in packages/app-store/<dirName> with _metadata.ts (or config.json) giving slug, type, category, dirName, isOAuth etc., an index.ts exporting api/lib/metadata, api/ handlers (add, callback) and lib/ (e.g. googlecalendar/lib/CalendarService.ts)."
+    - "app-store-cli (yarn app-store:build) generates the *.generated.ts registries (apps.metadata.generated.ts, apps.server.generated.ts with apiHandlers, calendar.services.generated.ts with CalendarServiceMap, video.adapters.generated.ts, payment.services.generated.ts, ...); never edit them by hand."
+    - "Apps are rows in the App table (slug, dirName, categories, keys, enabled), seeded from the metadata by scripts/seed-app-store.ts; a user's installation is a Credential row (type, key, appId, userId/teamId)."
+    - "Install: /api/integrations/<app>/add (apps/web/pages/api/integrations/[...args].ts) looks up the app's handler in apiHandlers; for Google it redirects to OAuth and googlecalendar/api/callback.ts stores the tokens as a Credential (CredentialRepository.create)."
+    - "Runtime: getCalendar (packages/app-store/_utils/getCalendar.ts) maps credential.type (e.g. google_calendar → googlecalendar) to the lazy import in CalendarServiceMap and instantiates its CalendarService, which implements the Calendar interface (packages/types/Calendar.d.ts: createEvent, updateEvent, deleteEvent, getAvailability, listCalendars)."
+  nice:
+    - "Google Calendar's metadata marks it installed only when GOOGLE_API_CREDENTIALS is set."
+    - "EventManager / CalendarManager use these services when bookings are created or cancelled."
+q4:
+  must:
+    - "Frontend: the Booker (apps/web/modules/bookings/components/Booker.tsx, BookEventForm) submits through useBookings (apps/web/modules/bookings/hooks/useBookings.ts) → createBooking in packages/features/bookings/lib/create-booking.ts → POST /api/book/event."
+    - "apps/web/pages/api/book/event.ts: optional Turnstile check, bot detection, rate limit, gets the session, then getRegularBookingService().createBooking (packages/features/bookings/lib/service/RegularBookingService.ts)."
+    - "RegularBookingService handler: loads the event type, validates booking data/responses, checks booker email block list, active-bookings limit, booking and duration limits, loads hosts and checks they are free (ensureAvailableUsers; round robin picks a host via LuckyUserService)."
+    - "The Booking row (with attendees) is written by handleNewBooking/createBooking.ts in a prisma.$transaction; status ACCEPTED, or PENDING when the event is not confirmed by default (requires confirmation)."
+    - "After saving: EventManager.create (packages/features/bookings/lib/EventManager.ts) creates the calendar events and video meeting via the installed apps and their references are stored as BookingReference rows; emails/SMS via BookingEmailSmsHandler (sendScheduledEmailsAndSMS, or request emails if confirmation needed); BOOKING_CREATED webhooks via handleWebhookTrigger; handlePayment when the event has a price."
+  nice:
+    - "Scheduled no-show triggers and booking events (BookingEventHandlerService.onBookingCreated) also fire."
+    - "Seated events go through handleSeats."
+q6:
+  must:
+    - "Entry: apps/web/app/api/cancel/route.ts (POST/DELETE): requires uid (not the numeric id), validates the CSRF token, rate limits, then calls handleCancelBooking (packages/features/bookings/lib/handleCancelBooking.ts)."
+    - "Refusals: booking not found, already cancelled, no user, event type has disableCancelling, cancellation reason required (requiresCancellationReason, depending on host vs attendee), booking already ended, and for seated events a non-host without seatReferenceUid."
+    - "Seated booking with a seat uid: only that attendee is removed (cancelAttendeeSeat). Otherwise the booking (or all remaining bookings of a recurring series) is set to CANCELLED with cancellationReason and cancelledBy via the booking repository."
+    - "BOOKING_CANCELLED webhooks are sent (getWebhooks + sendPayload); scheduled webhook triggers and no-show tasks are deleted."
+    - "Payments: ON_BOOKING payments are refunded (processPaymentRefund); HOLD payments may charge a no-show fee (processNoShowFeeOnCancellation)."
+    - "EventManager.cancelEvent deletes the calendar events/video meetings (skipped when the cancel came from a calendar sync), booking references are marked deleted, and sendCancelledEmailsAndSMS emails organizer and attendees."
+  nice:
+    - "Platform (OAuth client) bookings only send emails if platform emails are enabled."
+q5:
+  must:
+    - "packages/prisma/schema.prisma: add a nullable Int field (e.g. maxGuestsPerBooking) to model EventType + a new migration in packages/prisma/migrations (run yarn prisma generate)."
+    - "tRPC update input: packages/trpc/server/routers/viewer/eventTypes/types.ts (zod schema) and the update handler packages/trpc/server/routers/viewer/eventTypes/heavy/update.handler.ts (validate, e.g. ≥ 0, and save)."
+    - "UI: packages/features/eventtypes/components/tabs/limits/EventLimitsTab.tsx (new toggle + number input, like MaxActiveBookingsPerBookerController.tsx), form types/defaults in packages/features/eventtypes/lib/types.ts (and defaultEvents.ts / the event type form hook), translation keys in packages/i18n/locales/en/common.json."
+    - "Enforcement: select the field when loading the event type for booking (packages/features/bookings/lib/handleNewBooking/getEventTypesFromDB.ts) and check the number of responses.guests in RegularBookingService (packages/features/bookings/lib/service/RegularBookingService.ts), e.g. as a check next to checkActiveBookingsLimitForBooker, throwing an ErrorWithCode."
+  nice:
+    - "Optionally limit the guests input in the booking form and expose the field in API v2 event type input/output services."
+    - "Event type repository selects (packages/features/eventtypes/repositories/eventTypeRepository.ts) may need the field too."
+q7:
+  must:
+    - "apps/api/v2 NestJS: version picked by the cal-api-version header (bootstrap.ts enableVersioning); POST /v2/bookings is BookingsController_2024_08_13.createBooking (apps/api/v2/src/platform/bookings/2024-08-13/controllers/bookings.controller.ts) guarded by OptionalApiAuthGuard (no auth is allowed, invalid auth is rejected)."
+    - "ApiAuthStrategy (apps/api/v2/src/modules/auth/strategies/api-auth/api-auth.strategy.ts): a Bearer token starting with the api key prefix (default cal_) is an API key: prefix stripped, sha256-hashed (src/lib/api-key), looked up by hash (getApiKeyFromHash), rejected if missing or expired, and the key's user is loaded; other bearer tokens are OAuth access tokens, and x-cal-client-id + x-cal-secret-key headers authenticate an OAuth client."
+    - "BookingsService_2024_08_13.createBooking (services/bookings.service.ts) loads the event type, InputBookingsService_2024_08_13 turns the v2 body into the internal booking request, then the regular booking path runs (recurring and seated bookings have their own branches)."
+    - "Booking creation is the same shared RegularBookingService as the web app: apps/api/v2/src/lib/services/regular-booking.service.ts extends RegularBookingService from @calcom/platform-libraries/bookings (packages/features/bookings/lib/service/RegularBookingService.ts) with v2's Prisma/repositories injected; the output service maps the result to the v2 response."
+  nice:
+    - "The API key's teamId becomes request.organizationId."
+    - "creationSource marks API v2 bookings; webhooks/emails run the same way as in the web app."
+q8:
+  must:
+    - "Create packages/app-store/<name>calendar/ with: _metadata.ts (or config.json) with category/variant calendar, type '<name>_calendar', slug, dirName '<name>calendar', isOAuth; index.ts exporting api, lib and metadata; package.json; DESCRIPTION.md and static/icon.svg."
+    - "lib/CalendarService.ts implementing the Calendar interface from packages/types/Calendar.d.ts (createEvent, updateEvent, deleteEvent, getAvailability, listCalendars)."
+    - "api/add.ts (start OAuth or create the credential) and, for OAuth, api/callback.ts that stores the tokens as a Credential (CredentialRepository / buildCredentialCreateData), plus an api/index.ts exporting them; app keys/env vars (e.g. in .env.appStore.example, zod.ts for keys)."
+    - "Run the app-store-cli build (yarn app-store:build) to regenerate the *.generated.ts files (calendar.services.generated.ts CalendarServiceMap, apps.server.generated.ts, apps.metadata.generated.ts...); getCalendar maps credential type '<name>_calendar' to the '<name>calendar' entry, so type and dirName must match. Don't edit generated files by hand."
+    - "Seed/enable the App row (scripts/seed-app-store.ts via yarn seed-app-store, App.enabled) so it shows in the app store."
+  nice:
+    - "Copy googlecalendar or office365calendar as a starting point; packages/app-store/templates/_calendar says calendar templates are not streamlined."
+    - "Tests under the app folder; follow packages/app-store/CONTRIBUTING.md."
+q9:
+  must:
+    - "minimumBookingNotice defaults to 120 minutes (EventType @default(120) in packages/prisma/schema.prisma, also 120 in packages/features/eventtypes/lib/defaultEvents.ts)."
+    - "Slot spacing: frequency = eventType.slotInterval || input.duration || eventType.length (packages/trpc/server/routers/viewer/slots/util.ts, passed to getSlots); slotInterval is null by default, so slots step by the event length (or the chosen duration)."
+    - "The getAvailableSlots result is cached by withSlotsCache in util.ts, keyed by the JSON input, TTL SLOTS_CACHE_TTL env or DEFAULT_SLOTS_CACHE_TTL = 2000 ms (2 seconds)."
+    - "The cache is Upstash Redis (RedisService) only when UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN are set; otherwise NoopRedisService, i.e. no caching (packages/features/redis/di/redisModule.ts)."
+  nice:
+    - "getStartTime uses minimumBookingNotice || 1 minute from now as the earliest slot."
+q10:
+  must:
+    - "Stored on EventType as maxActiveBookingsPerBooker Int? plus maxActiveBookingPerBookerOfferReschedule Boolean @default(false) (packages/prisma/schema.prisma)."
+    - "Enforced in packages/features/bookings/lib/handleNewBooking/checkActiveBookingsLimitForBooker.ts, called by RegularBookingService for new bookings (not reschedules): counts upcoming (startTime ≥ now) ACCEPTED bookings of that event type where an attendee has the booker's email; at or over the limit it throws ErrorWithCode BookerLimitExceeded."
+    - "With 'offer reschedule' on it instead throws BookerLimitExceededReschedule carrying the last booking's uid/startTime (and seat uid) so the booker can reschedule it."
+    - "Set in the event type Limits tab (packages/features/eventtypes/components/tabs/limits/MaxActiveBookingsPerBookerController.tsx inside EventLimitsTab.tsx); saved by packages/trpc/server/routers/viewer/eventTypes/heavy/update.handler.ts, which rejects values < 1 and refuses it together with recurring events ('Recurring Events and booker active bookings limit cannot be active at the same time')."
+  nice:
+    - "API v2 event type input/output services map it too."

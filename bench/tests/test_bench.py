@@ -56,6 +56,26 @@ def test_arms_strip_and_overlay(setup, tmp_path):
     assert (br / "CLAUDE.md").read_text().startswith("Read AI_CONTEXT")
 
 
+
+def test_arm_copy_skips_dangling_symlinks_and_strips_folders(setup, tmp_path):
+    p, t = setup
+    repo = t / "repo"
+    (repo / "pkg").mkdir()
+    (repo / "pkg" / ".env").symlink_to("../../missing.env")      # like cal.com packages/prisma/.env
+    (repo / "agents").mkdir()
+    (repo / "agents" / "rules.md").write_text("their own AI docs")
+    (repo / "AGENTS.md").write_text("their own AI docs")
+    (repo / "CLAUDE.md").unlink()
+    (repo / "CLAUDE.md").symlink_to("AGENTS.md")
+    cfg = yaml.safe_load(open(p))
+    cfg["repos"]["demo"]["strip"] = ["CLAUDE.md", "AGENTS.md", "agents"]
+    p.write_text(yaml.safe_dump(cfg))
+    c = load(p)
+    none = ArmWorkspaces(c, JsonlResults(c.results_dir), tmp_path / "w").arm("demo", "none")
+    assert (none / "src" / "Basket.cs").exists()
+    assert not (none / "pkg" / ".env").exists()
+    assert not any((none / x).exists() for x in ["CLAUDE.md", "AGENTS.md", "agents"])
+
 def _paid(p, **extra):
     cfg = yaml.safe_load(open(p))
     cfg["models"] = [{"name": "paid", "runner": "paid-plugin", "model": "big"}]

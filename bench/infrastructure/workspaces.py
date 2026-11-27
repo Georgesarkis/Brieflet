@@ -37,7 +37,8 @@ class ArmWorkspaces:
         rc = self.cfg.repos[repo]
         src = self.cfg.path(rc["path"])
         self._check_pinned(repo, src, str(rc.get("sha") or ""))
-        shutil.copytree(src, dst, ignore=shutil.ignore_patterns(".git"), symlinks=False)
+        shutil.copytree(src, dst, ignore=shutil.ignore_patterns(".git"), symlinks=False,
+                        ignore_dangling_symlinks=True)   # cal.com: packages/prisma/.env -> missing ../../.env
         for s in rc.get("strip", []):
             p = dst / s
             shutil.rmtree(p) if p.is_dir() else p.unlink(missing_ok=True)

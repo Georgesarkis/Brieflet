@@ -1,0 +1,25 @@
+# Who wrote these docs. Shown on the dashboard.
+repo: calcom/cal.com
+sha: ae027bb70e694e2d2c44569f398d6cbcee0389b1
+source: open
+license: MIT
+language: TypeScript
+files: 5076         # fallback when the checkout isn't on this machine (measured 27 Nov 2026)
+loc: 491499
+generated: 2026-11-27
+made_with: "`python -m brieflet init` (any-language engine, Brieflet PR 5) on geolinux, `--out bench/artifacts/calcom-ae027bb/brieflet`"
+hardware: RTX 2070 8 GB (geolinux home server)
+writers:
+  - role: diagram box labels, decision classification
+    model: qwen3.5:9b
+    runtime: Ollama (local)
+  - role: AI_CONTEXT.md prose, decision records
+    model: Bonsai 27B (hf.co/prism-ml/Bonsai-27B-gguf:Q1_0)
+    runtime: Ollama (local)
+  - role: code index (codegraph arm)
+    model: none (CodeGraph 1.6.4, tree-sitter + SQLite, built by `prepare` in each bench run)
+    runtime: local CLI
+arms:
+  brieflet: AI_CONTEXT.md, CLAUDE.md, components diagram, decision records, DECISIONS.md (no graph)
+  brieflet-learn: same docs + LEARNED.md written by `bench learn` on the other fold
+  codegraph: CodeGraph's own install files (.mcp.json, .claude/settings.json with its prompt hook, .claude/CLAUDE.md), index built at run time
