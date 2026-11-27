@@ -6,7 +6,7 @@ Both apps in this repo, the engine (`brieflet/`) and the benchmark (`bench/`), f
 ```
 presentation ──┐                      CLI = controller, presenters, Markdown/HTML views
                ├──> application ──> domain
-infrastructure ┘                      git, disk, Ollama/Anthropic/OpenAI, Claude Code, JSONL files
+infrastructure ┘                      git, disk, Ollama, plugin loading, JSONL files
 ```
 
 **The one rule:** dependencies point inward. `domain` imports nothing from the other layers and does no IO.
@@ -61,7 +61,7 @@ bench/
   application/       ports.py · config.py (BenchConfig) · plan_benchmark.py · run_benchmark.py · learning_pass.py ·
                      judge_answers.py · outcome.py (exit codes)
   infrastructure/    config_loader.py · results_store.py (JSONL) · workspaces.py (arm copies) · judge_clients.py ·
-                     notifier.py · runners/ (claude_code, anthropic_api, openai_api, fake, repo_tools)
+                     notifier.py · runners/ (fake + plugin registry)
   presentation/      cli.py · plan_table.py · report_table.py · dashboard/ (page, results_html, setup_html, markdown_html)
   bootstrap.py       composition root (BenchApp)
 ```
@@ -78,10 +78,13 @@ The benchmark uses the engine as a library: `brieflet.domain.learned` (fact rule
 | You want to… | Add… |
 |---|---|
 | support a new kind of repo (Node, Python, plain .NET) | a `ComponentScanner` + `DecisionScanner` in `infrastructure/<language>/`, picked in `bootstrap.py` |
-| add a model backend | a class with `complete()` in `infrastructure/llm/backends.py` |
-| add a benchmark reader | a module with `run()` in `bench/infrastructure/runners/` + one line in its `MODULES` |
+| add a model backend | a plugin package: a class with `complete()`, `default_models`, `prices`, `paid`, registered under the `brieflet.llm_backends` entry point group (see `infrastructure/llm/backends.py`) |
+| add a benchmark reader / judge | a plugin package: `run()` under `brieflet.bench_runners`, `ask()` under `brieflet.bench_judges`, prices under `brieflet.bench_prices` |
 | change what a generated doc looks like | its view in `presentation/views/` (only there) |
 | change a rule (scoring, pruning, cost) | `domain/`, with a unit test, no mocks needed |
+
+Only local models ship in this repo. Anything else (cloud models, hosted runners) is a separate package that
+plugs into these entry points, so the core never imports a cloud SDK.
 
 ## Conventions
 

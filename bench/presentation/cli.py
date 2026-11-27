@@ -3,7 +3,7 @@
   python -m bench plan   [-c bench.yaml]                      matrix + cost estimate. Never spends.
   python -m bench learn  [-c bench.yaml] [--yes] [--only MODEL]  learning pass for arms with `learn:` (writes LEARNED.md per fold).
   python -m bench run    [-c bench.yaml] --yes [--only MODEL] [--resume]  runs it. Paid runners need --yes AND estimate ≤ max_usd.
-  python -m bench judge  [-c bench.yaml] [--yes]               quality 0-3 per answer (free via Claude Code by default).
+  python -m bench judge  [-c bench.yaml] [--yes]               quality 0-3 per answer (needs a `judge:` block).
   python -m bench dashboard [-c bench.yaml]                   one HTML page: results, models, generated docs.
   python -m bench report [-c bench.yaml]                      median table per repo × model × arm.
 

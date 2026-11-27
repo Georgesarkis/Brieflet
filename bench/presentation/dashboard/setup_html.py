@@ -13,7 +13,7 @@ def models(meta: dict, readers: list[dict], judge: dict) -> str:
     writers = "".join(f"<tr><td>{esc(w.get('role'))}</td><td><code>{esc(w.get('model'))}</code></td><td>{esc(w.get('runtime'))}</td></tr>"
                       for w in meta.get("writers", []))
     rd = "".join(f"<tr><td>{esc(m['name'])}</td><td><code>{esc(m['model'])}</code></td><td>{esc(m['runner'])}"
-                 f"{' (' + esc(m.get('billing', 'subscription')) + ')' if m['runner'] == 'claude_code' else ''}</td></tr>"
+                 f"{' (' + esc(m['billing']) + ')' if m.get('billing') else ''}</td></tr>"
                  for m in readers)
     supported = "".join(f"<h4>{esc(k)}</h4><div class='tw'><table><tbody>" +
                         "".join(f"<tr><td>{esc(a)}</td><td>{esc(b)}</td><td class='muted'>{esc(c)}</td></tr>" for a, b, c in v) +

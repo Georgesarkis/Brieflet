@@ -2,20 +2,22 @@
 from __future__ import annotations
 
 FREE_RUNNERS = {"fake"}
-MODEL_ALIASES = {"sonnet": "claude-sonnet-5-5", "opus": "claude-opus-5-5", "haiku": "claude-haiku-5-5"}
 CACHE_MIX = (0.15, 0.15, 0.70)   # share of input that is new / cache write / cache read in a typical tool loop
 
 
 def is_paid(model: dict) -> bool:
-    """Claude Code on a subscription and the fake runner are $0 extra; everything else is real money."""
-    if model["runner"] in FREE_RUNNERS:
-        return False
-    return not (model["runner"] == "claude_code" and model.get("billing", "subscription") == "subscription")
+    """The fake runner and any `billing: subscription` model are $0 extra; everything else is real money."""
+    return model.get("runner") not in FREE_RUNNERS and not is_subscription(model)
+
+
+def is_subscription(model: dict) -> bool:
+    """Billed by a flat plan the user already pays (no extra money, but it uses the plan's limit)."""
+    return model.get("billing") == "subscription"
 
 
 def price_of(prices: dict, model: dict) -> dict | None:
-    table = prices.get("openai" if model["runner"] == "openai" else "anthropic", {}) or {}
-    return table.get(MODEL_ALIASES.get(model["model"], model["model"]))
+    """prices.yaml has one section per runner name: {runner: {model: {input, output, cache_read, cache_write}}}."""
+    return (prices.get(model.get("runner")) or {}).get(model.get("model"))
 
 
 def usage_cost(usage: dict, price: dict | None) -> float | None:

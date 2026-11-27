@@ -19,12 +19,10 @@ def lab(arm: str) -> str:
 SUPPORTED = {
     "Writers (make the docs)": [
         ("Ollama, local", "qwen3.5:9b (labels) + Bonsai 27B (prose) by default; any Ollama model", "$0"),
-        ("Anthropic", "Claude Haiku 5.5 (labels) + Sonnet 5.5 (prose) by default", "≈ $0.12 per eShop-size repo"),
-        ("OpenAI", "any chat model you set with --small-model / --write-model", "set the price yourself"),
+        ("Plugin backends", "anything registered under brieflet.llm_backends", "estimate first, needs --yes if paid"),
     ],
     "Readers (answer questions in the benchmark)": [
-        ("Claude Code on your login", "sonnet / opus / haiku", "$0 extra, uses your plan's limit"),
-        ("Anthropic API", "claude-sonnet-5-5, claude-opus-5-5, claude-haiku-5-5", "pay per token, gated by --yes"),
-        ("OpenAI API", "any model + price you add to prices.yaml", "pay per token, gated by --yes"),
+        ("fake", "offline stand-in for tests", "$0"),
+        ("Plugin runners", "anything registered under brieflet.bench_runners", "estimate first, needs --yes if paid"),
     ],
 }

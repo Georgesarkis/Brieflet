@@ -4,7 +4,7 @@ from __future__ import annotations
 import statistics as st
 from dataclasses import dataclass, field
 
-from ..domain.pricing import estimate_run, is_paid
+from ..domain.pricing import estimate_run, is_paid, is_subscription
 from ..domain.results import input_tokens
 from .config import BenchConfig
 from .ports import ResultsStore
@@ -71,7 +71,7 @@ class PlanBenchmark:
     def _add(tot: PlanTotals, m: dict, n: int, est: tuple[float, float] | None) -> None:
         tot.runs += n
         if not is_paid(m):
-            if m["runner"] == "claude_code":
+            if is_subscription(m):
                 tot.sub_runs += n
                 tot.sub_usd += n * est[1] if est else 0
             return

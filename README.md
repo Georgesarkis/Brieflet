@@ -10,11 +10,14 @@ First measurement (22 Nov 2026, eShop, Claude Sonnet, 3 questions × 2 runs): **
 ## Use
 
 ```
-pip install requests                                   # + anthropic / openai for cloud models
-python -m brieflet init path/to/repo --plan            # what it will do + cost, calls no model
+pip install requests
+python -m brieflet init path/to/repo --plan            # what it will do, calls no model
 python -m brieflet init path/to/repo                   # local Ollama ($0): qwen3.5:9b labels, Bonsai 27B writes
-python -m brieflet init path/to/repo --llm anthropic --yes   # Haiku labels, Sonnet writes (~$0.12 on eShop)
 ```
+
+Local-first: the docs are written by a model on your own machine ([Ollama](https://ollama.com)), free, and your
+code never leaves it. Other model backends plug in through the `brieflet.llm_backends` entry point group
+(see [ARCHITECTURE.md](ARCHITECTURE.md)); a paid backend prints a cost estimate first and needs `--yes`.
 
 Writes `AI_CONTEXT.md`, `CLAUDE.md` (pointer), `docs/architecture/components.md` and `docs/decisions/` + `DECISIONS.md`.
 `--out DIR` writes somewhere else instead of into the repo. Today it understands **.NET Aspire** repos only.
@@ -30,7 +33,7 @@ again. Every `brieflet init` keeps those lines but drops ones whose file is gone
 ## Benchmark
 
 ```
-pip install pyyaml anthropic openai
+pip install pyyaml
 cp bench/bench.example.yaml bench/bench.yaml     # edit repos, arms, models
 python -m bench plan -c bench/bench.yaml         # matrix + cost estimate, spends nothing
 python -m bench learn -c bench/bench.yaml        # only for arms with `learn: true`: learning pass per fold
@@ -39,10 +42,9 @@ python -m bench report -c bench/bench.yaml
 python -m pytest bench/tests                     # offline tests, no keys
 ```
 
-Runners: `claude_code` (Claude Code on your Claude login: no extra money, uses your plan's limit),
-`anthropic` (Sonnet / Opus / Haiku via API key), `openai` (API key, set the model + price in `bench/prices.yaml`),
-`fake` (offline). The API runners share the same three read-only tools and system prompt. Compare arms within one
-model; different runners are different harnesses.
+Built-in runner: `fake` (offline, checks the pipeline). Reader models and the quality judge are plugins
+(`brieflet.bench_runners`, `brieflet.bench_judges` entry point groups); paid ones need a price, `--yes` and
+`max_usd`. Compare arms within one model; different runners are different harnesses.
 
 Learning is measured fairly: questions are split in folds (default 2). The arm learns on fold 1 and is measured on
 fold 2 with only fold 1's facts, and the other way round, so it never sees facts from the question it is scored on.

@@ -24,19 +24,21 @@ arms:
 
 # Which model answers. Compare arms within one model only.
 models:
-  - name: sonnet-sub                   # Claude Code on your Claude login: $0 extra, uses your plan's usage limit
-    runner: claude_code
-    model: sonnet
-    billing: subscription
-  # - name: sonnet-api                 # real money: ANTHROPIC_API_KEY
-  #   runner: anthropic
-  #   model: claude-sonnet-5-5
-  # - name: opus-api
-  #   runner: anthropic
-  #   model: claude-opus-5-5
-  # - name: gpt
-  #   runner: openai                   # OPENAI_API_KEY; fill the model id + price in prices.yaml first
-  #   model: gpt-placeholder
+  - name: fake                         # offline stand-in: checks the whole pipeline, $0
+    runner: fake
+    model: fake
+  # - name: my-reader                  # a plugin runner (entry point group brieflet.bench_runners)
+  #   runner: <plugin name>
+  #   model: <model id>
+  #   billing: subscription            # only if a flat plan you already pay covers it; otherwise it's paid:
+  #                                    # needs a price (prices: block below or the plugin's), --yes and max_usd
+
+# judge:                               # quality 0-3 per answer; `bench judge` refuses without this block
+#   runner: <plugin name>              # entry point group brieflet.bench_judges
+#   model: <model id>
+
+# prices:                              # USD per 1M tokens, per runner; overrides bench/prices.yaml + plugin prices
+#   <plugin name>: {<model id>: {input: 1.25, output: 10.00, cache_read: 0.125, cache_write: 1.25}}
 
 # Token guess per question run, used until real results exist (then `plan` uses measured medians instead).
 # From the 22 Nov 2026 eshop-demo run (Sonnet, Claude Code): none 158k / 3 q, graph 343k / 3 q, docs 78k / 3 q.
